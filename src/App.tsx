@@ -39,7 +39,7 @@ export default function App() {
   }, [setSession, setLoading])
 
   return (
-    <BrowserRouter>
+    <BrowserRouter basename={import.meta.env.BASE_URL}>
       <Suspense fallback={<PageLoader />}>
         <Routes>
           <Route path="/" element={<Navigate to="/app/dashboard" replace />} />
