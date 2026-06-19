@@ -1,0 +1,9 @@
+# 所有文字檔統一用 LF 儲存在 repository
+* text=auto eol=lf
+
+# 明確指定二進位檔，不做換行轉換
+*.png binary
+*.jpg binary
+*.ico binary
+*.woff2 binary
+*.woff binary
