@@ -34,6 +34,7 @@
 | 後端/資料庫 | Supabase（PostgreSQL + Auth + RLS） |
 | 圖示 | Lucide React |
 | 測試 | Vitest + Testing Library |
+| CI/CD | GitHub Actions |
 
 ---
 
@@ -49,14 +50,11 @@ npm install
 
 前往 [supabase.com](https://supabase.com) 建立新專案，在 SQL Editor 執行：
 
-```bash
-# 開啟專案根目錄的 schema 檔
-supabase_schema.sql
+```sql
+-- 複製 supabase_schema.sql 的內容貼入執行
 ```
 
 ### 3. 設定環境變數
-
-複製範本並填入 Supabase 憑證：
 
 ```bash
 cp .env.example .env.local
@@ -71,20 +69,49 @@ VITE_SUPABASE_ANON_KEY=your-anon-key-here
 
 ```bash
 npm run dev
+# http://localhost:5173
 ```
 
-開啟 [http://localhost:5173](http://localhost:5173)
+---
+
+## 部署到 GitHub Pages
+
+### 1. 推送到 GitHub
+
+```bash
+git remote add origin https://github.com/你的帳號/percento.git
+git push -u origin master
+```
+
+### 2. 開啟 GitHub Pages
+
+repo → **Settings → Pages → Source** 選 **GitHub Actions**
+
+### 3. 加入 Supabase Secrets
+
+repo → **Settings → Secrets and variables → Actions**，新增：
+
+| Secret 名稱 | 值 |
+|-------------|-----|
+| `VITE_SUPABASE_URL` | Supabase 專案 URL |
+| `VITE_SUPABASE_ANON_KEY` | Supabase anon key |
+
+Push 到 `master` 後自動部署，網址為：
+
+```
+https://你的帳號.github.io/percento/
+```
 
 ---
 
 ## 指令
 
 ```bash
-npm run dev          # 開發伺服器
-npm run build        # 生產建構
-npm run preview      # 預覽生產建構
-npm run test         # 測試（watch 模式）
-npm run test:run     # 測試（單次執行）
+npm run dev            # 開發伺服器
+npm run build          # 生產建構
+npm run preview        # 預覽生產建構
+npm run test           # 測試（watch 模式）
+npm run test:run       # 測試（單次執行）
 npm run test:coverage  # 測試 + coverage 報告
 ```
 
@@ -93,22 +120,26 @@ npm run test:coverage  # 測試 + coverage 報告
 ## 專案結構
 
 ```
+.github/
+└── workflows/
+    ├── ci.yml          # 每次 push/PR 跑型別檢查與測試
+    └── deploy.yml      # 推送至 master 自動部署 GitHub Pages
 src/
 ├── components/
-│   ├── ui/           # 基礎 UI 元件（Button、Card、Dialog 等）
-│   └── layout/       # 頁面版面（Sidebar、AppLayout）
-├── hooks/            # 資料 hooks（useAccounts、useNetWorth 等）
+│   ├── ui/             # 基礎 UI 元件（Button、Card、Dialog 等）
+│   └── layout/         # 頁面版面（Sidebar、AppLayout）
+├── hooks/              # 資料 hooks（useAccounts、useNetWorth 等）
 ├── lib/
-│   ├── currency.ts   # 匯率抓取與換算邏輯
-│   ├── quotes.ts     # 股票/加密貨幣報價邏輯
-│   ├── supabase.ts   # Supabase client
-│   └── utils.ts      # 格式化工具函式
+│   ├── currency.ts     # 匯率抓取與換算邏輯
+│   ├── quotes.ts       # 股票/加密貨幣報價邏輯
+│   ├── supabase.ts     # Supabase client
+│   └── utils.ts        # 格式化工具函式
 ├── pages/
 │   ├── Login.tsx
-│   └── app/          # 受保護的應用頁面
-├── store/            # Zustand stores（auth、settings）
-├── test/             # 測試設定
-└── types/            # TypeScript 型別定義
+│   └── app/            # 受保護的應用頁面
+├── store/              # Zustand stores（auth、settings）
+├── test/               # 測試設定
+└── types/              # TypeScript 型別定義
 ```
 
 ---
@@ -116,9 +147,9 @@ src/
 ## 資料庫 Schema
 
 ```sql
-accounts          -- 現金、銀行、房產帳戶
-positions         -- 投資部位（股票、加密貨幣）
-liabilities       -- 負債（房貸、信貸）
+accounts            -- 現金、銀行、房產帳戶
+positions           -- 投資部位（股票、加密貨幣）
+liabilities         -- 負債（房貸、信貸）
 net_worth_snapshots -- 淨資產歷史快照
 ```
 
@@ -129,8 +160,8 @@ net_worth_snapshots -- 淨資產歷史快照
 ## 測試
 
 ```
-Tests: 85 passed
+Tests:    85 passed
 Coverage: lib/ ~97%、hooks/useNetWorth 100%
 ```
 
-測試範圍涵蓋：匯率換算邏輯、報價快取機制、Auth store、Settings store、淨資產計算 hook。
+測試範圍：匯率換算邏輯、報價快取機制、Auth store、Settings store、淨資產計算 hook。

@@ -9,6 +9,13 @@
   VITE_SUPABASE_URL=https://xxxx.supabase.co
   VITE_SUPABASE_ANON_KEY=eyJ...
   ```
+- [ ] 在 GitHub 建立 repo 並推送
+  ```bash
+  git remote add origin https://github.com/你的帳號/percento.git
+  git push -u origin master
+  ```
+- [ ] GitHub repo → Settings → Pages → Source 選 **GitHub Actions**
+- [ ] 在 GitHub Secrets 加入 `VITE_SUPABASE_URL`、`VITE_SUPABASE_ANON_KEY`
 
 ---
 
@@ -74,3 +81,21 @@
 - [ ] CRUD hooks（useAccounts、usePositions 等）目前 coverage 0%，考慮補整合測試
 - [ ] `quotes.ts` 使用 Yahoo Finance 非官方 API，長期穩定性有風險，評估官方替代方案
 - [ ] Build chunk `useSnapshots` 295KB、`index` 251KB，可進一步分析並優化
+
+---
+
+## 已完成
+
+- [x] 專案初始化（Vite + React + TypeScript + Tailwind CSS v4）
+- [x] Supabase 整合（Auth、PostgreSQL、RLS schema）
+- [x] 全功能 CRUD：帳戶、投資部位、負債、快照
+- [x] 多幣別換算 + 匯率 API（含離線備援）
+- [x] 自動報價（Yahoo Finance / Binance）+ 快取
+- [x] 儀表板圓餅圖、歷史折線圖
+- [x] 85 個單元測試，lib/ 覆蓋率 97%
+- [x] 0 TypeScript errors，0 build warnings
+- [x] React.lazy route-level code-splitting
+- [x] Git 初始化（.gitattributes LF 統一、.gitignore）
+- [x] GitHub Actions CI（push/PR 自動跑測試）
+- [x] GitHub Actions 自動部署 GitHub Pages
+- [x] SPA 路由修正（index.html → 404.html，BrowserRouter basename）
