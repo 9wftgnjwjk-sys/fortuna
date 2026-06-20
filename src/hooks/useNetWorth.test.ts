@@ -105,10 +105,10 @@ describe('useNetWorth', () => {
     expect(result.current.data?.netWorth).toBe(400_000)
   })
 
-  it('uses manual_price for positions that have one', async () => {
+  it('uses cost_price for positions that have one', async () => {
     setupMocks({
       positions: [
-        { id: '1', symbol: '2330', type: 'tw_stock', quantity: 1000, currency: 'TWD', manual_price: 950 },
+        { id: '1', symbol: '2330', type: 'tw_stock', quantity: 1000, currency: 'TWD', cost_price: 950 },
       ],
     })
 
@@ -120,11 +120,11 @@ describe('useNetWorth', () => {
     expect(fetchQuote).not.toHaveBeenCalled()
   })
 
-  it('fetches quote for positions without manual_price', async () => {
+  it('fetches quote for positions without cost_price', async () => {
     vi.mocked(fetchQuote).mockResolvedValueOnce({ symbol: 'AAPL', price: 200, currency: 'USD' })
     setupMocks({
       positions: [
-        { id: '1', symbol: 'AAPL', type: 'us_stock', quantity: 10, currency: 'USD', manual_price: null },
+        { id: '1', symbol: 'AAPL', type: 'us_stock', quantity: 10, currency: 'USD', cost_price: null },
       ],
     })
     // 讓 convertCurrency 對 USD→TWD 回傳 200*10*32.5 = 65000
@@ -162,7 +162,7 @@ describe('useNetWorth', () => {
 
     it('includes investment entry when positions have value', async () => {
       setupMocks({
-        positions: [{ id: '1', symbol: '2330', type: 'tw_stock', quantity: 1, currency: 'TWD', manual_price: 1000 }],
+        positions: [{ id: '1', symbol: '2330', type: 'tw_stock', quantity: 1, currency: 'TWD', cost_price: 1000 }],
       })
 
       const { result } = renderHook(() => useNetWorth(), { wrapper: makeWrapper() })

@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query'
 import { useAccounts } from './useAccounts'
 import { usePositions } from './usePositions'
 import { useLiabilities } from './useLiabilities'
+import { usePrices } from './usePrices'
 import { fetchExchangeRates, convertCurrency } from '@/lib/currency'
 import { fetchQuote } from '@/lib/quotes'
 import { useSettingsStore } from '@/store/settings'
@@ -18,9 +19,11 @@ export function useNetWorth() {
   const { data: accounts = [] } = useAccounts()
   const { data: positions = [] } = usePositions()
   const { data: liabilities = [] } = useLiabilities()
+  const symbols = positions.map((p) => p.symbol)
+  const { data: pricesMap = {} } = usePrices(symbols)
 
   return useQuery({
-    queryKey: ['net_worth', baseCurrency, accounts, positions, liabilities],
+    queryKey: ['net_worth', baseCurrency, accounts, positions, liabilities, pricesMap],
     queryFn: async () => {
       const rates = await fetchExchangeRates(baseCurrency)
 
@@ -30,19 +33,19 @@ export function useNetWorth() {
         totalCash += convertCurrency(a.balance, a.currency as Currency, baseCurrency, rates)
       }
 
-      // 投資部位（抓即時報價）
+      // 投資部位：優先用 prices 表（Python 每日更新），fallback 到即時報價
       let totalInvestments = 0
       for (const p of positions) {
-        let price = p.manual_price ?? 0
-        if (!p.manual_price) {
+        const dbPrice = pricesMap[p.symbol]
+        if (dbPrice) {
+          const value = convertCurrency(dbPrice.price * p.quantity, dbPrice.currency as Currency, baseCurrency, rates)
+          totalInvestments += value
+        } else {
           const quote = await fetchQuote(p.symbol, p.type)
-          price = quote?.price ?? 0
+          const price = quote?.price ?? 0
           const quoteCurrency = quote?.currency ?? p.currency as Currency
-          const valueInBase = convertCurrency(price * p.quantity, quoteCurrency, baseCurrency, rates)
-          totalInvestments += valueInBase
-          continue
+          totalInvestments += convertCurrency(price * p.quantity, quoteCurrency, baseCurrency, rates)
         }
-        totalInvestments += convertCurrency(price * p.quantity, p.currency as Currency, baseCurrency, rates)
       }
 
       // 負債

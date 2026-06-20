@@ -9,6 +9,7 @@ import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useAccounts, useCreateAccount, useUpdateAccount, useDeleteAccount } from '@/hooks/useAccounts'
 import { usePositions, useCreatePosition, useUpdatePosition, useDeletePosition } from '@/hooks/usePositions'
+import { fetchQuote } from '@/lib/quotes'
 import { formatCurrency } from '@/lib/utils'
 import type { Account, Position, AccountType, PositionType, Currency } from '@/types'
 
@@ -23,10 +24,10 @@ const positionTypeLabels: Record<PositionType, string> = {
 const currencies: Currency[] = ['TWD', 'USD', 'JPY', 'HKD', 'EUR', 'GBP', 'BTC', 'ETH']
 
 type AccountForm = { name: string; type: AccountType; currency: Currency; balance: string }
-type PositionForm = { name: string; symbol: string; type: PositionType; quantity: string; currency: Currency; manual_price: string }
+type PositionForm = { name: string; symbol: string; type: PositionType; quantity: string; currency: Currency; cost_price: string }
 
 const defaultAccountForm: AccountForm = { name: '', type: 'bank', currency: 'TWD', balance: '' }
-const defaultPositionForm: PositionForm = { name: '', symbol: '', type: 'tw_stock', quantity: '', currency: 'TWD', manual_price: '' }
+const defaultPositionForm: PositionForm = { name: '', symbol: '', type: 'tw_stock', quantity: '', currency: 'TWD', cost_price: '' }
 
 export default function Assets() {
   const { data: accounts = [], isLoading: loadingAccounts } = useAccounts()
@@ -42,6 +43,8 @@ export default function Assets() {
   const [positionDialog, setPositionDialog] = useState<{ open: boolean; editing: Position | null }>({ open: false, editing: null })
   const [accountForm, setAccountForm] = useState<AccountForm>(defaultAccountForm)
   const [positionForm, setPositionForm] = useState<PositionForm>(defaultPositionForm)
+  const [symbolLooking, setSymbolLooking] = useState(false)
+  const [saveError, setSaveError] = useState<string | null>(null)
 
   function openNewAccount() {
     setAccountForm(defaultAccountForm)
@@ -68,8 +71,18 @@ export default function Assets() {
     setAccountDialog({ open: false, editing: null })
   }
 
+  async function handleSymbolBlur() {
+    const { symbol, type, name } = positionForm
+    if (!symbol || name) return
+    setSymbolLooking(true)
+    const result = await fetchQuote(symbol, type)
+    setSymbolLooking(false)
+    if (result?.name) setPositionForm((f) => ({ ...f, name: result.name! }))
+  }
+
   function openNewPosition() {
     setPositionForm(defaultPositionForm)
+    setSaveError(null)
     setPositionDialog({ open: true, editing: null })
   }
 
@@ -77,26 +90,34 @@ export default function Assets() {
     setPositionForm({
       name: p.name, symbol: p.symbol, type: p.type,
       quantity: String(p.quantity), currency: p.currency,
-      manual_price: p.manual_price != null ? String(p.manual_price) : '',
+      cost_price: p.cost_price != null ? String(p.cost_price) : '',
     })
     setPositionDialog({ open: true, editing: p })
   }
 
   async function handleSavePosition() {
+    setSaveError(null)
     const payload = {
       name: positionForm.name,
       symbol: positionForm.symbol.toUpperCase(),
       type: positionForm.type,
       quantity: parseFloat(positionForm.quantity) || 0,
       currency: positionForm.currency,
-      manual_price: positionForm.manual_price ? parseFloat(positionForm.manual_price) : null,
+      cost_price: positionForm.cost_price ? parseFloat(positionForm.cost_price) : null,
     }
-    if (positionDialog.editing) {
-      await updatePosition.mutateAsync({ id: positionDialog.editing.id, ...payload })
-    } else {
-      await createPosition.mutateAsync(payload)
+    try {
+      if (positionDialog.editing) {
+        await updatePosition.mutateAsync({ id: positionDialog.editing.id, ...payload })
+      } else {
+        await createPosition.mutateAsync(payload)
+      }
+      setPositionDialog({ open: false, editing: null })
+    } catch (err) {
+      const msg = err instanceof Error ? err.message
+        : (err as { message?: string })?.message
+        ?? JSON.stringify(err)
+      setSaveError(msg || '儲存失敗，請再試一次')
     }
-    setPositionDialog({ open: false, editing: null })
   }
 
   if (loadingAccounts || loadingPositions) {
@@ -159,10 +180,9 @@ export default function Assets() {
                     </div>
                     <div className="flex items-center gap-3">
                       <span className="text-sm text-[hsl(240_5%_64.9%)]">× {p.quantity}</span>
-                      {p.manual_price && (
-                        <span className="font-semibold text-white">{formatCurrency(p.manual_price, p.currency)}</span>
+                      {p.cost_price && (
+                        <span className="text-xs text-[hsl(240_5%_64.9%)]">均價 {formatCurrency(p.cost_price, p.currency)}</span>
                       )}
-                      {!p.manual_price && <Badge variant="default" className="text-xs">自動報價</Badge>}
                       <button onClick={() => openEditPosition(p)} className="text-[hsl(240_5%_64.9%)] hover:text-white"><Pencil className="h-4 w-4" /></button>
                       <button onClick={() => deletePosition.mutate(p.id)} className="text-[hsl(240_5%_64.9%)] hover:text-red-400"><Trash2 className="h-4 w-4" /></button>
                     </div>
@@ -225,7 +245,10 @@ export default function Assets() {
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>代號</Label>
-                <Input value={positionForm.symbol} onChange={(e) => setPositionForm({ ...positionForm, symbol: e.target.value })} placeholder="2330" />
+                <div className="relative">
+                  <Input value={positionForm.symbol} onChange={(e) => setPositionForm({ ...positionForm, symbol: e.target.value })} onBlur={handleSymbolBlur} placeholder="2330" />
+                  {symbolLooking && <Loader2 className="absolute right-2 top-2.5 h-4 w-4 animate-spin text-[hsl(240_5%_64.9%)]" />}
+                </div>
               </div>
               <div className="space-y-2">
                 <Label>名稱</Label>
@@ -255,10 +278,11 @@ export default function Assets() {
               </div>
             </div>
             <div className="space-y-2">
-              <Label>手動價格（留空則自動抓取）</Label>
-              <Input type="number" value={positionForm.manual_price} onChange={(e) => setPositionForm({ ...positionForm, manual_price: e.target.value })} placeholder="自動" />
+              <Label>均價（買入成本，選填）</Label>
+              <Input type="number" value={positionForm.cost_price} onChange={(e) => setPositionForm({ ...positionForm, cost_price: e.target.value })} placeholder="0.00" />
             </div>
           </div>
+          {saveError && <p className="text-sm text-red-400">{saveError}</p>}
           <DialogFooter>
             <Button variant="outline" onClick={() => setPositionDialog({ open: false, editing: null })}>取消</Button>
             <Button onClick={handleSavePosition} disabled={createPosition.isPending || updatePosition.isPending}>儲存</Button>

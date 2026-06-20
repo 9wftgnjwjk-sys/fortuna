@@ -23,9 +23,16 @@ export interface Position {
   type: PositionType
   quantity: number
   currency: Currency
-  manual_price: number | null
+  cost_price: number | null
   created_at: string
   updated_at: string
+}
+
+export interface Price {
+  symbol: string
+  price: number
+  currency: Currency
+  fetched_at: string
 }
 
 export interface Liability {
