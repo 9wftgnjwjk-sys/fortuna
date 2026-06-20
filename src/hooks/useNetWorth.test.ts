@@ -25,10 +25,14 @@ vi.mock('@/lib/currency', () => ({
 vi.mock('@/lib/quotes', () => ({
   fetchQuote: vi.fn(),
 }))
+vi.mock('./usePrices', () => ({
+  usePrices: vi.fn(),
+}))
 
 import { useAccounts } from './useAccounts'
 import { usePositions } from './usePositions'
 import { useLiabilities } from './useLiabilities'
+import { usePrices } from './usePrices'
 import { fetchExchangeRates, convertCurrency } from '@/lib/currency'
 import { fetchQuote } from '@/lib/quotes'
 
@@ -56,6 +60,7 @@ function setupMocks({
   vi.mocked(useAccounts).mockReturnValue({ data: accounts as Account[], isLoading: false } as ReturnType<typeof useAccounts>)
   vi.mocked(usePositions).mockReturnValue({ data: positions as Position[], isLoading: false } as ReturnType<typeof usePositions>)
   vi.mocked(useLiabilities).mockReturnValue({ data: liabilities as Liability[], isLoading: false } as ReturnType<typeof useLiabilities>)
+  vi.mocked(usePrices).mockReturnValue({ data: {}, isLoading: false } as ReturnType<typeof usePrices>)
   vi.mocked(fetchExchangeRates).mockResolvedValue(mockRates)
   // convertCurrency: 預設 identity（同幣別）
   vi.mocked(convertCurrency).mockImplementation((amount) => amount)
