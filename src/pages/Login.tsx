@@ -47,7 +47,7 @@ export default function Login() {
         <div className="flex flex-col items-center gap-2">
           <div className="flex items-center gap-2">
             <BarChart3 className="h-8 w-8 text-[hsl(142.1_76.2%_36.3%)]" />
-            <span className="text-2xl font-bold text-white">Percento</span>
+            <span className="text-2xl font-bold text-white">Fortuna</span>
           </div>
           <p className="text-sm text-[hsl(240_5%_64.9%)]">個人資產管理</p>
         </div>

@@ -1,6 +1,6 @@
-# Percento Web
+# Fortuna — 個人資產管理
 
-個人資產負債表管理工具，網頁版。靈感來自 Apple App Store 精選 iOS App「Percento」。
+使用 [Claude Code](https://claude.ai/code) 產生的個人資產負債表管理網頁。
 
 不記帳、不追蹤日常花費——只關注**淨資產**的長期成長。
 
@@ -12,7 +12,8 @@
 - **負債管理** — 房貸、信貸與其他負債
 - **淨資產計算** — 自動加總換算，即時顯示 `總資產 − 總負債`
 - **多幣別換算** — 支援 TWD、USD、JPY、HKD、EUR、GBP、BTC、ETH，統一換算成基準幣別
-- **自動報價** — 股票透過 Yahoo Finance，加密貨幣透過 Binance，15 分鐘本地快取
+- **自動報價** — 台股透過 TWSE 官方 API，美股透過 Yahoo Finance，加密貨幣透過 Binance
+- **每日價格更新** — GitHub Actions 每個工作日自動抓取盤後價格
 - **資產配置圓餅圖** — 視覺化各類資產佔比
 - **歷史快照與折線圖** — 手動儲存淨資產快照，追蹤長期趨勢
 - **雲端同步** — 資料儲存於 Supabase，多裝置共用
@@ -25,7 +26,7 @@
 | 分類 | 技術 |
 |------|------|
 | 前端框架 | React 19 + TypeScript |
-| 建構工具 | Vite 8 |
+| 建構工具 | Vite |
 | 樣式 | Tailwind CSS v4 |
 | UI 元件 | Radix UI primitives（自製） |
 | 圖表 | Recharts |
@@ -48,11 +49,7 @@ npm install
 
 ### 2. 設定 Supabase
 
-前往 [supabase.com](https://supabase.com) 建立新專案，在 SQL Editor 執行：
-
-```sql
--- 複製 supabase_schema.sql 的內容貼入執行
-```
+前往 [supabase.com](https://supabase.com) 建立新專案，在 SQL Editor 執行 `supabase_schema.sql`。
 
 ### 3. 設定環境變數
 
@@ -62,7 +59,7 @@ cp .env.example .env.local
 
 ```env
 VITE_SUPABASE_URL=https://your-project.supabase.co
-VITE_SUPABASE_ANON_KEY=your-anon-key-here
+VITE_SUPABASE_ANON_KEY=your-publishable-key
 ```
 
 ### 4. 啟動開發伺服器
@@ -74,33 +71,25 @@ npm run dev
 
 ---
 
-## 部署到 GitHub Pages
+## 每日價格抓取
 
-### 1. 推送到 GitHub
+`scripts/fetch_prices.py` 會自動抓取所有部位的盤後價格並寫入 Supabase。
+
+本機執行：
 
 ```bash
-git remote add origin https://github.com/你的帳號/percento.git
-git push -u origin master
+cd scripts
+cp .env.example .env   # 填入 SUPABASE_URL 和 SUPABASE_SERVICE_KEY
+pip install -r requirements.txt
+python fetch_prices.py
 ```
 
-### 2. 開啟 GitHub Pages
-
-repo → **Settings → Pages → Source** 選 **GitHub Actions**
-
-### 3. 加入 Supabase Secrets
-
-repo → **Settings → Secrets and variables → Actions**，新增：
+GitHub Actions 在每個工作日 14:30（台灣時間）自動執行，需在 repo Secrets 設定：
 
 | Secret 名稱 | 值 |
-|-------------|-----|
-| `VITE_SUPABASE_URL` | Supabase 專案 URL |
-| `VITE_SUPABASE_ANON_KEY` | Supabase anon key |
-
-Push 到 `master` 後自動部署，網址為：
-
-```
-https://你的帳號.github.io/percento/
-```
+|---|---|
+| `SUPABASE_URL` | Supabase 專案 URL |
+| `SUPABASE_SERVICE_KEY` | Supabase service role key |
 
 ---
 
@@ -109,37 +98,8 @@ https://你的帳號.github.io/percento/
 ```bash
 npm run dev            # 開發伺服器
 npm run build          # 生產建構
-npm run preview        # 預覽生產建構
 npm run test           # 測試（watch 模式）
 npm run test:run       # 測試（單次執行）
-npm run test:coverage  # 測試 + coverage 報告
-```
-
----
-
-## 專案結構
-
-```
-.github/
-└── workflows/
-    ├── ci.yml          # 每次 push/PR 跑型別檢查與測試
-    └── deploy.yml      # 推送至 master 自動部署 GitHub Pages
-src/
-├── components/
-│   ├── ui/             # 基礎 UI 元件（Button、Card、Dialog 等）
-│   └── layout/         # 頁面版面（Sidebar、AppLayout）
-├── hooks/              # 資料 hooks（useAccounts、useNetWorth 等）
-├── lib/
-│   ├── currency.ts     # 匯率抓取與換算邏輯
-│   ├── quotes.ts       # 股票/加密貨幣報價邏輯
-│   ├── supabase.ts     # Supabase client
-│   └── utils.ts        # 格式化工具函式
-├── pages/
-│   ├── Login.tsx
-│   └── app/            # 受保護的應用頁面
-├── store/              # Zustand stores（auth、settings）
-├── test/               # 測試設定
-└── types/              # TypeScript 型別定義
 ```
 
 ---
@@ -151,17 +111,7 @@ accounts            -- 現金、銀行、房產帳戶
 positions           -- 投資部位（股票、加密貨幣）
 liabilities         -- 負債（房貸、信貸）
 net_worth_snapshots -- 淨資產歷史快照
+prices              -- 每日盤後價格（由 Python 腳本更新）
 ```
 
 所有資料表啟用 Row Level Security，使用者只能存取自己的資料。
-
----
-
-## 測試
-
-```
-Tests:    85 passed
-Coverage: lib/ ~97%、hooks/useNetWorth 100%
-```
-
-測試範圍：匯率換算邏輯、報價快取機制、Auth store、Settings store、淨資產計算 hook。

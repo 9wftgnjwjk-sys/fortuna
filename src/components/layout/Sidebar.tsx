@@ -20,7 +20,7 @@ export function Sidebar() {
     <aside className="flex h-screen w-60 flex-col border-r border-[hsl(240_3.7%_15.9%)] bg-[hsl(240_10%_4%)]">
       <div className="flex items-center gap-2 px-6 py-5">
         <BarChart3 className="h-6 w-6 text-[hsl(142.1_76.2%_36.3%)]" />
-        <span className="text-lg font-bold tracking-tight text-white">Percento</span>
+        <span className="text-lg font-bold tracking-tight text-white">Fortuna</span>
       </div>
 
       <nav className="flex-1 space-y-1 px-3 py-2">
