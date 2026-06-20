@@ -111,15 +111,15 @@ describe('useNetWorth', () => {
   })
 
   it('uses price from pricesMap when available', async () => {
-    vi.mocked(usePrices).mockReturnValue({
-      data: { '2330': { symbol: '2330', price: 950, currency: 'TWD', fetched_at: '' } },
-      isLoading: false,
-    } as ReturnType<typeof usePrices>)
     setupMocks({
       positions: [
         { id: '1', symbol: '2330', type: 'tw_stock', quantity: 1000, currency: 'TWD', cost_price: 800 },
       ],
     })
+    vi.mocked(usePrices).mockReturnValue({
+      data: { '2330': { symbol: '2330', price: 950, currency: 'TWD', fetched_at: '' } },
+      isLoading: false,
+    } as ReturnType<typeof usePrices>)
 
     const { result } = renderHook(() => useNetWorth(), { wrapper: makeWrapper() })
     await waitFor(() => expect(result.current.isSuccess).toBe(true))
@@ -170,13 +170,13 @@ describe('useNetWorth', () => {
     })
 
     it('includes investment entry when positions have value', async () => {
+      setupMocks({
+        positions: [{ id: '1', symbol: '2330', type: 'tw_stock', quantity: 1, currency: 'TWD', cost_price: 1000 }],
+      })
       vi.mocked(usePrices).mockReturnValue({
         data: { '2330': { symbol: '2330', price: 1000, currency: 'TWD', fetched_at: '' } },
         isLoading: false,
       } as ReturnType<typeof usePrices>)
-      setupMocks({
-        positions: [{ id: '1', symbol: '2330', type: 'tw_stock', quantity: 1, currency: 'TWD', cost_price: 1000 }],
-      })
 
       const { result } = renderHook(() => useNetWorth(), { wrapper: makeWrapper() })
       await waitFor(() => expect(result.current.isSuccess).toBe(true))
