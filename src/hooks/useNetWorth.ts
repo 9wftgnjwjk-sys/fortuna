@@ -66,11 +66,10 @@ export function useNetWorth() {
       const detail: AllocationDetail[] = [...cashDetail, ...investmentDetail]
 
       const allocation: AssetAllocation[] = []
-      const colors = ['#22c55e', '#3b82f6', '#f59e0b', '#8b5cf6', '#ef4444', '#06b6d4']
+      const colors = ['#22c55e', '#3b82f6', '#f59e0b', '#8b5cf6', '#06b6d4']
       let colorIdx = 0
       if (totalCash > 0) allocation.push({ name: '現金/銀行', value: totalCash, color: colors[colorIdx++] })
       if (totalInvestments > 0) allocation.push({ name: '投資', value: totalInvestments, color: colors[colorIdx++] })
-      if (totalLiabilities > 0) allocation.push({ name: '負債', value: totalLiabilities, color: colors[colorIdx] })
 
       return { totalAssets, totalLiabilities, netWorth, allocation, detail, baseCurrency }
     },

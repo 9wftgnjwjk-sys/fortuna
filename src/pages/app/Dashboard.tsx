@@ -75,7 +75,7 @@ export default function Dashboard() {
       {data && data.allocation.length > 0 && (
         <Card>
           <CardHeader>
-            <CardTitle>資產配置</CardTitle>
+            <CardTitle>總資產配置</CardTitle>
           </CardHeader>
           <CardContent>
             <ResponsiveContainer width="100%" height={280}>
@@ -112,6 +112,40 @@ export default function Dashboard() {
                 />
               </PieChart>
             </ResponsiveContainer>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* 負債概況 */}
+      {data && data.totalLiabilities > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle>負債概況</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="flex justify-between text-sm">
+              <span className="text-[hsl(240_5%_64.9%)]">負債佔總資產</span>
+              <span className="font-semibold text-red-400">
+                {data.totalAssets > 0 ? `${(data.totalLiabilities / data.totalAssets * 100).toFixed(1)}%` : '—'}
+              </span>
+            </div>
+            {/* 進度條：左側淨資產（綠），右側負債（紅） */}
+            {data.totalAssets > 0 && (
+              <div className="flex h-3 w-full overflow-hidden rounded-full bg-[hsl(240_3.7%_15.9%)]">
+                <div
+                  className="bg-[hsl(142.1_76.2%_36.3%)] transition-all"
+                  style={{ width: `${Math.min(100, data.netWorth / data.totalAssets * 100)}%` }}
+                />
+                <div
+                  className="bg-red-500 transition-all"
+                  style={{ width: `${Math.min(100, data.totalLiabilities / data.totalAssets * 100)}%` }}
+                />
+              </div>
+            )}
+            <div className="flex justify-between text-xs text-[hsl(240_5%_64.9%)]">
+              <span>淨資產 {formatCurrency(data.netWorth, baseCurrency)}</span>
+              <span>負債 {formatCurrency(data.totalLiabilities, baseCurrency)}</span>
+            </div>
           </CardContent>
         </Card>
       )}

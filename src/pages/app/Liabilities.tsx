@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useLiabilities, useCreateLiability, useUpdateLiability, useDeleteLiability } from '@/hooks/useLiabilities'
-import { formatCurrency, computeLiabilityBalance } from '@/lib/utils'
+import { formatCurrency, computeLiabilityBalance, computePayoffDate } from '@/lib/utils'
 import type { Liability, LiabilityType, Currency } from '@/types'
 
 const liabilityTypeLabels: Record<LiabilityType, string> = {
@@ -111,6 +111,7 @@ export default function Liabilities() {
                 {liabilities.map((l) => {
                   const remaining = computeLiabilityBalance(l)
                   const hasAutoCalc = l.monthly_payment != null && l.payment_start_date != null
+                  const payoffDate = computePayoffDate(l)
                   return (
                     <div key={l.id} className="rounded-lg bg-[hsl(240_3.7%_8%)] px-4 py-3 space-y-1">
                       <div className="flex items-center justify-between">
@@ -125,12 +126,18 @@ export default function Liabilities() {
                         </div>
                       </div>
                       {hasAutoCalc && (
-                        <div className="flex items-center gap-3 text-xs text-[hsl(240_5%_64.9%)]">
+                        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[hsl(240_5%_64.9%)]">
                           <span>原始金額 {formatCurrency(l.balance, l.currency)}</span>
                           <span>·</span>
                           <span>每月 -{formatCurrency(l.monthly_payment!, l.currency)}</span>
                           <span>·</span>
-                          <span>自 {l.payment_start_date} 起</span>
+                          <span>自 {l.payment_start_date?.substring(0, 7)} 起</span>
+                          {payoffDate && (
+                            <>
+                              <span>·</span>
+                              <span>預計 <span className="text-amber-400">{payoffDate}</span> 還清</span>
+                            </>
+                          )}
                         </div>
                       )}
                     </div>

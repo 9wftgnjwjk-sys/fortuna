@@ -50,6 +50,18 @@ export function computeLiabilityBalance(l: {
   return Math.max(0, l.balance - l.monthly_payment * Math.max(0, monthsElapsed))
 }
 
+export function computePayoffDate(l: {
+  balance: number
+  monthly_payment: number | null
+  payment_start_date: string | null
+}): string | null {
+  if (!l.monthly_payment || !l.payment_start_date || l.monthly_payment <= 0) return null
+  const totalMonths = Math.ceil(l.balance / l.monthly_payment)
+  const start = new Date(l.payment_start_date)
+  start.setMonth(start.getMonth() + totalMonths)
+  return `${start.getFullYear()}/${String(start.getMonth() + 1).padStart(2, '0')}`
+}
+
 export function formatDate(dateStr: string): string {
   return new Date(dateStr).toLocaleDateString('zh-TW', {
     year: 'numeric',
