@@ -1,4 +1,5 @@
-import { TrendingUp, TrendingDown, DollarSign, Loader2 } from 'lucide-react'
+import { useState } from 'react'
+import { TrendingUp, TrendingDown, DollarSign, Loader2, ChevronLeft } from 'lucide-react'
 import {
   PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Legend,
 } from 'recharts'
@@ -6,6 +7,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { useNetWorth } from '@/hooks/useNetWorth'
 import { useSettingsStore } from '@/store/settings'
 import { formatCurrency } from '@/lib/utils'
+
+const DRILL_COLORS = ['#3b82f6', '#f59e0b', '#8b5cf6', '#06b6d4', '#ec4899', '#22c55e', '#ef4444']
 
 function StatCard({
   title, value, icon: Icon, positive,
@@ -28,6 +31,7 @@ function StatCard({
 export default function Dashboard() {
   const baseCurrency = useSettingsStore((s) => s.baseCurrency)
   const { data, isLoading } = useNetWorth()
+  const [drillCategory, setDrillCategory] = useState<'cash' | 'investment' | null>(null)
 
   if (isLoading) {
     return (
@@ -37,7 +41,25 @@ export default function Dashboard() {
     )
   }
 
-  const pieTotal = (data?.allocation ?? []).reduce((s, a) => s + a.value, 0)
+  // ── Pie chart data ─────────────────────────────────────────────────────────
+  const topLevel = data?.allocation ?? []
+
+  const drillItems = drillCategory
+    ? (data?.detail ?? [])
+        .filter((d) => d.category === drillCategory)
+        .map((d, i) => ({ name: d.name, value: d.value, color: DRILL_COLORS[i % DRILL_COLORS.length] }))
+    : []
+
+  const pieData = drillCategory ? drillItems : topLevel
+  const pieTotal = pieData.reduce((s, a) => s + a.value, 0)
+
+  const drillTitle = drillCategory === 'cash' ? '現金 / 銀行' : '投資部位'
+
+  function handleSliceClick(entry: { name?: string }) {
+    if (drillCategory) return
+    if (entry.name === '現金/銀行') setDrillCategory('cash')
+    else if (entry.name === '投資') setDrillCategory('investment')
+  }
 
   return (
     <div className="space-y-6">
@@ -52,16 +74,24 @@ export default function Dashboard() {
         <StatCard title="總負債" value={formatCurrency(data?.totalLiabilities ?? 0, baseCurrency)} icon={TrendingDown} positive={false} />
       </div>
 
-      {data && data.allocation.length > 0 && (
+      {data && topLevel.length > 0 && (
         <Card>
-          <CardHeader>
-            <CardTitle>總資產配置</CardTitle>
+          <CardHeader className="flex flex-row items-center gap-2 pb-2">
+            {drillCategory && (
+              <button
+                onClick={() => setDrillCategory(null)}
+                className="text-[hsl(240_5%_64.9%)] hover:text-white transition-colors"
+              >
+                <ChevronLeft className="h-5 w-5" />
+              </button>
+            )}
+            <CardTitle>{drillCategory ? drillTitle : '總資產配置'}</CardTitle>
           </CardHeader>
           <CardContent>
             <ResponsiveContainer width="100%" height={280}>
               <PieChart>
                 <Pie
-                  data={data.allocation}
+                  data={pieData}
                   cx="50%"
                   cy="50%"
                   innerRadius={65}
@@ -70,8 +100,10 @@ export default function Dashboard() {
                   dataKey="value"
                   label={({ percent }) => (percent ?? 0) > 0.04 ? `${((percent ?? 0) * 100).toFixed(1)}%` : ''}
                   labelLine={false}
+                  onClick={handleSliceClick}
+                  cursor={drillCategory ? 'default' : 'pointer'}
                 >
-                  {data.allocation.map((entry, index) => (
+                  {pieData.map((entry, index) => (
                     <Cell key={index} fill={entry.color} />
                   ))}
                 </Pie>
@@ -87,7 +119,15 @@ export default function Dashboard() {
                 <Legend
                   formatter={(value, entry: any) => {
                     const pct = pieTotal > 0 ? ((entry.payload?.value ?? 0) / pieTotal * 100).toFixed(1) : '0'
-                    return <span style={{ color: 'hsl(240 5% 80%)' }}>{value} {pct}%</span>
+                    const clickable = !drillCategory && (value === '現金/銀行' || value === '投資')
+                    return (
+                      <span
+                        style={{ color: 'hsl(240 5% 80%)', cursor: clickable ? 'pointer' : 'default' }}
+                        onClick={() => clickable && handleSliceClick({ name: value })}
+                      >
+                        {value} {pct}%
+                      </span>
+                    )
                   }}
                 />
               </PieChart>
@@ -186,7 +226,7 @@ export default function Dashboard() {
         </Card>
       )}
 
-      {(!data || data.allocation.length === 0) && (
+      {(!data || topLevel.length === 0) && (
         <Card>
           <CardContent className="flex flex-col items-center justify-center py-16 text-center">
             <DollarSign className="mb-4 h-12 w-12 text-[hsl(240_5%_40%)]" />
