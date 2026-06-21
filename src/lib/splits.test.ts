@@ -7,14 +7,14 @@ beforeEach(() => {
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
-function twseMonth(rows: Array<[string, number]>) {
-  // rows: [ROC_date, close]  e.g. ["115/06/10", 188.65]
+function twseMonth(rows: Array<[string, number, number?]>) {
+  // rows: [ROC_date, close, priceChange?]  priceChange defaults to 0 (no market move)
   return {
     ok: true,
     json: async () => ({
       stat: 'OK',
-      data: rows.map(([d, close]) => [
-        d, '0', '0', '0', '0', '0', String(close), '0', '0', '',
+      data: rows.map(([d, close, priceChange = 0]) => [
+        d, '0', '0', '0', '0', '0', String(close), String(priceChange), '0', '',
       ]),
     }),
   } as Response
@@ -53,13 +53,14 @@ describe('fetchRecentSplits — tw_stock (TWSE price detection)', () => {
     expect(spy).not.toHaveBeenCalledWith(expect.stringContaining('yahoo'), expect.anything())
   })
 
-  it('detects a 1:4 split (e.g. 0050) from consecutive day prices', async () => {
-    // Simulate two months: May ends at 188.65, June starts at 47.57
+  it('detects a 1:4 split (e.g. 0050) using reference price (close - priceChange)', async () => {
+    // Real data: 06/10 close=188.65, 06/18 close=47.57 漲跌=+0.41
+    // refPrice = 47.57 - 0.41 = 47.16; 188.65 / 47.16 = 3.999 → 4
     const spy = vi.spyOn(globalThis, 'fetch')
     spy.mockImplementation((url: RequestInfo | URL) => {
       const u = String(url)
-      if (u.includes('20250501')) return Promise.resolve(twseMonth([['114/05/29', 188.65]]))
-      if (u.includes('20250601')) return Promise.resolve(twseMonth([['114/06/18', 47.57]]))
+      if (u.includes('20250501')) return Promise.resolve(twseMonth([['114/05/29', 188.65, 4.95]]))
+      if (u.includes('20250601')) return Promise.resolve(twseMonth([['114/06/18', 47.57, 0.41]]))
       return Promise.resolve(NO_DATA)
     })
     const result = await fetchRecentSplits('0050', 'tw_stock')
@@ -68,18 +69,19 @@ describe('fetchRecentSplits — tw_stock (TWSE price detection)', () => {
     expect(result![0].date).toBe('2025-06-18')
   })
 
-  it('detects a 1:23 split (e.g. 00631L) from consecutive day prices', async () => {
+  it('detects a 1:22 split (e.g. 00631L) using reference price (close - priceChange)', async () => {
+    // Real data: 03/24 close=443.15, 03/31 close=19.26 漲跌=-0.88
+    // refPrice = 19.26 - (-0.88) = 20.14; 443.15 / 20.14 = 22.0 → 22
     const spy = vi.spyOn(globalThis, 'fetch')
     spy.mockImplementation((url: RequestInfo | URL) => {
       const u = String(url)
-      if (u.includes('20260301')) return Promise.resolve(twseMonth([['115/03/24', 443.15]]))
-      if (u.includes('20260401')) return Promise.resolve(twseMonth([['115/04/01', 19.26]]))
+      if (u.includes('20260301')) return Promise.resolve(twseMonth([['115/03/24', 443.15, 0.35], ['115/03/31', 19.26, -0.88]]))
       return Promise.resolve(NO_DATA)
     })
     const result = await fetchRecentSplits('00631L', 'tw_stock')
     expect(result).toHaveLength(1)
-    expect(result![0].ratio).toBe(23)
-    expect(result![0].date).toBe('2026-04-01')
+    expect(result![0].ratio).toBe(22)
+    expect(result![0].date).toBe('2026-03-31')
   })
 
   it('returns multiple splits sorted newest first', async () => {
@@ -99,13 +101,15 @@ describe('fetchRecentSplits — tw_stock (TWSE price detection)', () => {
     expect(result![0].date > result![1].date).toBe(true) // newest first
   })
 
-  it('ignores normal price drops (< 1.5x) that are not splits', async () => {
+  it('ignores normal price drops that are not splits', async () => {
     const spy = vi.spyOn(globalThis, 'fetch')
     spy.mockImplementation((url: RequestInfo | URL) => {
       const u = String(url)
-      // 5% drop — not a split
-      if (u.includes('20260301')) return Promise.resolve(twseMonth([['115/03/24', 100.00]]))
-      if (u.includes('20260401')) return Promise.resolve(twseMonth([['115/04/01', 95.00]]))
+      // 5% drop with matching priceChange — refPrice ≈ prevClose, ratio ≈ 1
+      if (u.includes('20260301')) return Promise.resolve(twseMonth([
+        ['115/03/24', 100.00, 0],
+        ['115/03/25', 95.00, -5.00],  // refPrice = 95 - (-5) = 100 → ratio = 1, not detected
+      ]))
       return Promise.resolve(NO_DATA)
     })
     const result = await fetchRecentSplits('0050', 'tw_stock')

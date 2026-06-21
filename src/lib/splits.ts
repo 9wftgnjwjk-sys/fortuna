@@ -18,7 +18,13 @@ function parseROCDate(rocDate: string): string {
   return `${parseInt(y) + 1911}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`
 }
 
-async function fetchTWSEMonth(symbol: string, yyyymm: string): Promise<Array<{ date: string; close: number }>> {
+interface DayPrice {
+  date: string
+  close: number
+  priceChange: number  // 漲跌價差；close - priceChange = 除權參考價
+}
+
+async function fetchTWSEMonth(symbol: string, yyyymm: string): Promise<DayPrice[]> {
   try {
     const res = await fetch(
       `https://www.twse.com.tw/rwd/zh/afterTrading/STOCK_DAY?stockNo=${symbol}&date=${yyyymm}01&response=json`
@@ -30,8 +36,9 @@ async function fetchTWSEMonth(symbol: string, yyyymm: string): Promise<Array<{ d
       .map((row: string[]) => ({
         date: parseROCDate(row[0]),
         close: parseFloat(row[6].replace(/,/g, '')),
+        priceChange: parseFloat(row[7].replace(/,/g, '')),
       }))
-      .filter((d: { close: number }) => !isNaN(d.close) && d.close > 0)
+      .filter((d: DayPrice) => !isNaN(d.close) && d.close > 0)
   } catch {
     return []
   }
@@ -51,9 +58,14 @@ async function detectSplitsFromTWSE(symbol: string, monthsBack = 24): Promise<Sp
 
     const splits: SplitEvent[] = []
     for (let i = 1; i < allDays.length; i++) {
-      const ratio = allDays[i - 1].close / allDays[i].close
+      const prevClose = allDays[i - 1].close
+      // 除權參考價 = 收盤 - 漲跌。在分割當日，TWSE 以 prevClose/ratio 為參考基準，
+      // 當日市場漲跌反映在漲跌欄，還原後比例即為精確整數。
+      const refPrice = allDays[i].close - allDays[i].priceChange
+      if (refPrice <= 0 || isNaN(refPrice)) continue
+      const ratio = prevClose / refPrice
       const rounded = Math.round(ratio)
-      if (rounded >= 2 && Math.abs(ratio - rounded) / rounded < 0.10) {
+      if (rounded >= 2 && Math.abs(ratio - rounded) / rounded < 0.02) {
         splits.push({ date: allDays[i].date, ratio: rounded })
       }
     }
