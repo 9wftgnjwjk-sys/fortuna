@@ -461,8 +461,57 @@ export default function Assets() {
         <CardContent>
           {positions.length === 0
             ? <p className="text-center text-sm text-[hsl(240_5%_64.9%)] py-8">尚無投資部位</p>
-            : (
+            : (() => {
+                // 計算有完整資料的 positions 的總覽
+                const positionsWithData = positions.filter(
+                  (p) => p.cost_price != null && prices[p.symbol]?.price != null
+                )
+                const currencies = [...new Set(positionsWithData.map((p) => p.currency))]
+                const singleCurrency = currencies.length === 1 ? currencies[0] : null
+                const totalCost = positionsWithData.reduce((s, p) => s + p.cost_price! * p.quantity, 0)
+                const totalMarket = positionsWithData.reduce((s, p) => s + prices[p.symbol]!.price * p.quantity, 0)
+                const totalGain = totalMarket - totalCost
+                const totalReturnRate = totalCost > 0 ? totalGain / totalCost * 100 : null
+
+                return (
               <div className="space-y-2">
+                {positionsWithData.length >= 2 && (
+                  <div className="rounded-lg border border-[hsl(240_3.7%_15.9%)] px-4 py-3 mb-3 grid grid-cols-2 gap-x-6 gap-y-1 text-sm">
+                    <div className="flex justify-between">
+                      <span className="text-[hsl(240_5%_64.9%)]">總市值</span>
+                      <span className="font-semibold text-white">
+                        {formatCurrency(totalMarket, (singleCurrency ?? 'TWD') as Parameters<typeof formatCurrency>[1])}
+                        {!singleCurrency && <span className="ml-1 text-xs text-[hsl(240_5%_50%)]">*</span>}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-[hsl(240_5%_64.9%)]">總成本</span>
+                      <span className="font-semibold text-white">
+                        {formatCurrency(totalCost, (singleCurrency ?? 'TWD') as Parameters<typeof formatCurrency>[1])}
+                        {!singleCurrency && <span className="ml-1 text-xs text-[hsl(240_5%_50%)]">*</span>}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-[hsl(240_5%_64.9%)]">總損益</span>
+                      <span className={`font-semibold ${totalGain >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                        {totalGain >= 0 ? '+' : ''}{formatCurrency(totalGain, (singleCurrency ?? 'TWD') as Parameters<typeof formatCurrency>[1])}
+                        {!singleCurrency && <span className="ml-1 text-xs text-[hsl(240_5%_50%)]">*</span>}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-[hsl(240_5%_64.9%)]">總報酬率</span>
+                      {totalReturnRate != null
+                        ? <span className={`font-semibold ${totalReturnRate >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                            {totalReturnRate >= 0 ? '+' : ''}{totalReturnRate.toFixed(2)}%
+                          </span>
+                        : <span className="text-white">—</span>
+                      }
+                    </div>
+                    {!singleCurrency && (
+                      <p className="col-span-2 text-xs text-[hsl(240_5%_50%)]">* 包含多幣別，數字未換算</p>
+                    )}
+                  </div>
+                )}
                 {positions.map((p) => {
                   const currentPrice = prices[p.symbol]?.price ?? null
                   const returnRate = p.cost_price != null && currentPrice != null
@@ -502,8 +551,9 @@ export default function Assets() {
                   )
                 })}
               </div>
-            )
-          }
+                )
+              })()
+            }
         </CardContent>
       </Card>
 
