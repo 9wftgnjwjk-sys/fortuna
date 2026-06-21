@@ -59,7 +59,9 @@ def fetch_tw_stock_price(symbol: str) -> tuple[float, str, str | None] | None:
             return fetch_tpex_price(symbol)
         # fields: 日期、成交股數、成交金額、開盤價、最高價、最低價、收盤價、漲跌、筆數
         close_price = float(data["data"][-1][6].replace(",", ""))
-        name = parse_tw_name_from_title(symbol, data.get("title", ""))
+        title = data.get("title", "")
+        print(f"    DEBUG title: {repr(title)}", file=sys.stderr)
+        name = parse_tw_name_from_title(symbol, title)
         return close_price, "TWD", name
     except Exception as e:
         print(f"    TWSE error ({symbol}): {e}", file=sys.stderr)
