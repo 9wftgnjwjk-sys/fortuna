@@ -54,19 +54,27 @@ function TransactionDialog({ position, onClose }: { position: Position; onClose:
   const [splitDone, setSplitDone] = useState<number | null>(null)
   const [recentSplits, setRecentSplits] = useState<SplitEvent[]>([])
   const [splitsLoading, setSplitsLoading] = useState(false)
-  const [splitsQueried, setSplitsQueried] = useState(false)
+  const [splitsStatus, setSplitsStatus] = useState<'idle' | 'ok' | 'empty' | 'error'>('idle')
 
   async function handleQuerySplits() {
     setSplitsLoading(true)
-    setSplitsQueried(false)
+    setSplitsStatus('idle')
     const splits = await fetchRecentSplits(position.symbol, position.type)
-    setRecentSplits(splits)
     setSplitsLoading(false)
-    setSplitsQueried(true)
-    if (splits.length === 1) {
-      setSplitDate(splits[0].date)
-      setSplitRatio(String(splits[0].ratio))
-      setSplitDone(null)
+    if (splits === null) {
+      setSplitsStatus('error')
+      setRecentSplits([])
+    } else if (splits.length === 0) {
+      setSplitsStatus('empty')
+      setRecentSplits([])
+    } else {
+      setSplitsStatus('ok')
+      setRecentSplits(splits)
+      if (splits.length === 1) {
+        setSplitDate(splits[0].date)
+        setSplitRatio(String(splits[0].ratio))
+        setSplitDone(null)
+      }
     }
   }
 
@@ -227,7 +235,7 @@ function TransactionDialog({ position, onClose }: { position: Position; onClose:
           <p className="text-xs text-[hsl(240_5%_50%)]">將分割日前的舊紀錄回溯調整：股數 × 比例，價格 ÷ 比例</p>
 
           {/* 查詢到的分割記錄 */}
-          {splitsQueried && recentSplits.length > 0 && (
+          {splitsStatus === 'ok' && (
             <div className="space-y-1.5">
               <p className="text-xs text-[hsl(240_5%_64.9%)]">查詢到以下分割記錄（點選套用）：</p>
               <div className="flex flex-wrap gap-2">
@@ -243,8 +251,11 @@ function TransactionDialog({ position, onClose }: { position: Position; onClose:
               </div>
             </div>
           )}
-          {splitsQueried && recentSplits.length === 0 && (
-            <p className="text-xs text-amber-400">未查詢到分割記錄，請手動輸入</p>
+          {splitsStatus === 'empty' && (
+            <p className="text-xs text-amber-400">Yahoo Finance 查無此股票的分割記錄，請手動輸入</p>
+          )}
+          {splitsStatus === 'error' && (
+            <p className="text-xs text-red-400">查詢失敗（可能為網路或 CORS 問題），請手動輸入</p>
           )}
 
           <div className="grid grid-cols-3 gap-2 items-end">

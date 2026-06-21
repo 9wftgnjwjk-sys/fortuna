@@ -27,19 +27,13 @@ describe('fetchRecentSplits', () => {
   it('appends .TW suffix for tw_stock', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(makeSplitResponse({}))
     await fetchRecentSplits('0050', 'tw_stock')
-    expect(fetch).toHaveBeenCalledWith(
-      expect.stringContaining('0050.TW'),
-      expect.any(Object)
-    )
+    expect(fetch).toHaveBeenCalledWith(expect.stringContaining('0050.TW'))
   })
 
   it('appends .T suffix for jp_stock', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(makeSplitResponse({}))
     await fetchRecentSplits('7203', 'jp_stock')
-    expect(fetch).toHaveBeenCalledWith(
-      expect.stringContaining('7203.T'),
-      expect.any(Object)
-    )
+    expect(fetch).toHaveBeenCalledWith(expect.stringContaining('7203.T'))
   })
 
   it('uses no suffix for us_stock', async () => {
@@ -102,15 +96,15 @@ describe('fetchRecentSplits', () => {
     expect(result).toEqual([])
   })
 
-  it('returns empty array when fetch fails (non-ok response)', async () => {
+  it('returns null when fetch returns non-ok response', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue({ ok: false } as Response)
     const result = await fetchRecentSplits('0050', 'tw_stock')
-    expect(result).toEqual([])
+    expect(result).toBeNull()
   })
 
-  it('returns empty array when fetch throws', async () => {
+  it('returns null when fetch throws (network error / CORS)', async () => {
     vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('network error'))
     const result = await fetchRecentSplits('0050', 'tw_stock')
-    expect(result).toEqual([])
+    expect(result).toBeNull()
   })
 })

@@ -14,15 +14,16 @@ function getYahooSuffix(type: PositionType): string {
   }
 }
 
-export async function fetchRecentSplits(symbol: string, type: PositionType): Promise<SplitEvent[]> {
+// Returns SplitEvent[] on success (may be empty if no splits found),
+// or null if the network request itself failed (e.g. CORS, timeout).
+export async function fetchRecentSplits(symbol: string, type: PositionType): Promise<SplitEvent[] | null> {
   if (type === 'crypto') return []
   const ticker = `${symbol}${getYahooSuffix(type)}`
   try {
     const res = await fetch(
-      `https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?events=splits&range=5y&interval=1mo`,
-      { headers: { 'User-Agent': 'Mozilla/5.0' } }
+      `https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?events=splits&range=5y&interval=1mo`
     )
-    if (!res.ok) return []
+    if (!res.ok) return null
     const data = await res.json()
     const splits: Record<string, { date: number; numerator: number; denominator: number }> =
       data?.chart?.result?.[0]?.events?.splits ?? {}
@@ -33,6 +34,6 @@ export async function fetchRecentSplits(symbol: string, type: PositionType): Pro
       }))
       .sort((a, b) => b.date.localeCompare(a.date)) // newest first
   } catch {
-    return []
+    return null
   }
 }
