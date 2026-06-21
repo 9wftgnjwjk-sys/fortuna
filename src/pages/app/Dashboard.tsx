@@ -1,75 +1,11 @@
-import { useState } from 'react'
-import { TrendingUp, TrendingDown, DollarSign, Loader2, Save } from 'lucide-react'
+import { TrendingUp, TrendingDown, DollarSign, Loader2 } from 'lucide-react'
 import {
   PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Legend,
-  AreaChart, Area, XAxis, YAxis, CartesianGrid,
 } from 'recharts'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
 import { useNetWorth } from '@/hooks/useNetWorth'
-import { useCreateSnapshot } from '@/hooks/useSnapshots'
-import { usePortfolioTrend, type TrendPoint } from '@/hooks/usePortfolioTrend'
 import { useSettingsStore } from '@/store/settings'
-import { formatCurrency, extractErrorMessage } from '@/lib/utils'
-
-function MiniTrendChart({
-  data, dataKey, color, gradId, baseCurrency,
-}: {
-  data: TrendPoint[]
-  dataKey: keyof TrendPoint
-  color: string
-  gradId: string
-  baseCurrency: string
-}) {
-  return (
-    <ResponsiveContainer width="100%" height={160}>
-      <AreaChart data={data} margin={{ top: 4, right: 4, bottom: 0, left: 0 }}>
-        <defs>
-          <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
-            <stop offset="5%" stopColor={color} stopOpacity={0.3} />
-            <stop offset="95%" stopColor={color} stopOpacity={0} />
-          </linearGradient>
-        </defs>
-        <CartesianGrid strokeDasharray="3 3" stroke="hsl(240 3.7% 15.9%)" />
-        <XAxis
-          dataKey="date"
-          tick={{ fontSize: 10, fill: 'hsl(240 5% 64.9%)' }}
-          tickFormatter={(v: string) => v.slice(5)}
-          interval="preserveStartEnd"
-        />
-        <YAxis
-          tick={{ fontSize: 10, fill: 'hsl(240 5% 64.9%)' }}
-          tickFormatter={(v: number) => {
-            if (Math.abs(v) >= 1_000_000) return `${(v / 1_000_000).toFixed(1)}M`
-            if (Math.abs(v) >= 1_000) return `${(v / 1_000).toFixed(0)}K`
-            return String(v)
-          }}
-          width={52}
-        />
-        <Tooltip
-          contentStyle={{
-            backgroundColor: 'hsl(240 10% 8%)',
-            border: '1px solid hsl(240 3.7% 15.9%)',
-            borderRadius: '8px',
-            color: 'white',
-            fontSize: 12,
-          }}
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          formatter={(value: any) => [formatCurrency(Number(value), baseCurrency as any)]}
-          labelFormatter={(label: unknown) => String(label)}
-        />
-        <Area
-          type="monotone"
-          dataKey={dataKey as string}
-          stroke={color}
-          strokeWidth={2}
-          fill={`url(#${gradId})`}
-          dot={false}
-        />
-      </AreaChart>
-    </ResponsiveContainer>
-  )
-}
+import { formatCurrency } from '@/lib/utils'
 
 function StatCard({
   title, value, icon: Icon, positive,
@@ -92,25 +28,6 @@ function StatCard({
 export default function Dashboard() {
   const baseCurrency = useSettingsStore((s) => s.baseCurrency)
   const { data, isLoading } = useNetWorth()
-  const createSnapshot = useCreateSnapshot()
-  const { data: trendPoints = [], isLoading: trendLoading } = usePortfolioTrend()
-  const [snapshotError, setSnapshotError] = useState<string | null>(null)
-
-  async function handleSaveSnapshot() {
-    if (!data) return
-    setSnapshotError(null)
-    try {
-      await createSnapshot.mutateAsync({
-        total_assets: data.totalAssets,
-        total_liabilities: data.totalLiabilities,
-        net_worth: data.netWorth,
-        base_currency: baseCurrency,
-        snapshot_date: new Date().toISOString().split('T')[0],
-      })
-    } catch (err) {
-      setSnapshotError(extractErrorMessage(err) || '快照儲存失敗')
-    }
-  }
 
   if (isLoading) {
     return (
@@ -124,18 +41,9 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-white">儀表板</h1>
-          <p className="text-sm text-[hsl(240_5%_64.9%)]">資產總覽</p>
-        </div>
-        <div className="flex flex-col items-end gap-1">
-          <Button variant="outline" size="sm" onClick={handleSaveSnapshot} disabled={createSnapshot.isPending}>
-            <Save className="h-4 w-4" />
-            儲存快照
-          </Button>
-          {snapshotError && <p className="text-xs text-red-400">{snapshotError}</p>}
-        </div>
+      <div>
+        <h1 className="text-2xl font-bold text-white">儀表板</h1>
+        <p className="text-sm text-[hsl(240_5%_64.9%)]">資產總覽</p>
       </div>
 
       <div className="grid gap-4 md:grid-cols-3">
@@ -201,7 +109,6 @@ export default function Dashboard() {
                 {data.totalAssets > 0 ? `${(data.totalLiabilities / data.totalAssets * 100).toFixed(1)}%` : '—'}
               </span>
             </div>
-            {/* 進度條：左側淨資產（綠），右側負債（紅） */}
             {data.totalAssets > 0 && (
               <div className="flex h-3 w-full overflow-hidden rounded-full bg-[hsl(240_3.7%_15.9%)]">
                 <div
@@ -272,37 +179,6 @@ export default function Dashboard() {
                       </div>
                     </div>
                   ))}
-                </div>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      )}
-
-      {/* 資產趨勢 */}
-      {(trendLoading || trendPoints.length > 0) && (
-        <Card>
-          <CardHeader>
-            <CardTitle>資產趨勢</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {trendLoading ? (
-              <div className="flex h-48 items-center justify-center">
-                <Loader2 className="h-5 w-5 animate-spin text-[hsl(240_5%_64.9%)]" />
-              </div>
-            ) : (
-              <div className="space-y-6">
-                <div>
-                  <p className="mb-1 text-xs font-semibold text-[hsl(240_5%_64.9%)]">純投資部位</p>
-                  <MiniTrendChart data={trendPoints} dataKey="investments" color="#3b82f6" gradId="gradInvest" baseCurrency={baseCurrency} />
-                </div>
-                <div>
-                  <p className="mb-1 text-xs font-semibold text-[hsl(240_5%_64.9%)]">投資部位 + 現金</p>
-                  <MiniTrendChart data={trendPoints} dataKey="withCash" color="#f59e0b" gradId="gradWithCash" baseCurrency={baseCurrency} />
-                </div>
-                <div>
-                  <p className="mb-1 text-xs font-semibold text-[hsl(240_5%_64.9%)]">淨資產（扣除負債）</p>
-                  <MiniTrendChart data={trendPoints} dataKey="netWorth" color="#22c55e" gradId="gradNet" baseCurrency={baseCurrency} />
                 </div>
               </div>
             )}
