@@ -185,7 +185,7 @@ describe('useNetWorth', () => {
       expect(names).toContain('投資')
     })
 
-    it('includes liability entry when liabilities exist', async () => {
+    it('excludes liabilities from allocation (shown separately as debt ratio)', async () => {
       setupMocks({
         accounts: [{ id: '1', balance: 1_000_000, currency: 'TWD' }],
         liabilities: [{ id: '1', balance: 500_000, currency: 'TWD' }],
@@ -195,7 +195,10 @@ describe('useNetWorth', () => {
       await waitFor(() => expect(result.current.isSuccess).toBe(true))
 
       const names = result.current.data?.allocation.map((a) => a.name) ?? []
-      expect(names).toContain('負債')
+      expect(names).not.toContain('負債')
+      expect(names).toContain('現金/銀行')
+      // totalLiabilities should still be correctly calculated
+      expect(result.current.data?.totalLiabilities).toBe(500_000)
     })
 
     it('returns empty allocation when all balances are zero', async () => {
