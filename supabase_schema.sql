@@ -31,7 +31,7 @@ create table positions (
 create table stock_transactions (
   id uuid primary key default uuid_generate_v4(),
   position_id uuid references positions(id) on delete cascade not null,
-  user_id uuid references auth.users(id) on delete cascade not null,
+  user_id uuid references auth.users(id) on delete cascade not null default auth.uid(),
   transaction_date date not null,
   quantity numeric not null,
   price numeric not null,

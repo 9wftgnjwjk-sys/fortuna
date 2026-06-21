@@ -18,13 +18,21 @@ export function useStockTransactions(positionId: string) {
   })
 }
 
+async function getUserId(): Promise<string> {
+  const { data: { session } } = await supabase.auth.getSession()
+  const userId = session?.user?.id
+  if (!userId) throw new Error('尚未登入')
+  return userId
+}
+
 export function useCreateStockTransaction() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: async (tx: Omit<StockTransaction, 'id' | 'user_id' | 'created_at'>) => {
+      const user_id = await getUserId()
       const { data, error } = await supabase
         .from('stock_transactions')
-        .insert(tx)
+        .insert({ ...tx, user_id })
         .select()
         .single()
       if (error) throw error
@@ -38,9 +46,10 @@ export function useImportStockTransactions() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: async (rows: Array<Omit<StockTransaction, 'id' | 'user_id' | 'created_at'>>) => {
+      const user_id = await getUserId()
       const { data, error } = await supabase
         .from('stock_transactions')
-        .insert(rows)
+        .insert(rows.map((r) => ({ ...r, user_id })))
         .select()
       if (error) throw error
       return data as StockTransaction[]
