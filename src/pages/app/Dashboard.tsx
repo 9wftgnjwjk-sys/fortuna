@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { TrendingUp, TrendingDown, DollarSign, Loader2, Save } from 'lucide-react'
 import {
   PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Legend,
@@ -7,7 +8,7 @@ import { Button } from '@/components/ui/button'
 import { useNetWorth } from '@/hooks/useNetWorth'
 import { useCreateSnapshot } from '@/hooks/useSnapshots'
 import { useSettingsStore } from '@/store/settings'
-import { formatCurrency } from '@/lib/utils'
+import { formatCurrency, extractErrorMessage } from '@/lib/utils'
 
 function StatCard({
   title, value, icon: Icon, positive,
@@ -31,16 +32,22 @@ export default function Dashboard() {
   const baseCurrency = useSettingsStore((s) => s.baseCurrency)
   const { data, isLoading } = useNetWorth()
   const createSnapshot = useCreateSnapshot()
+  const [snapshotError, setSnapshotError] = useState<string | null>(null)
 
   async function handleSaveSnapshot() {
     if (!data) return
-    await createSnapshot.mutateAsync({
-      total_assets: data.totalAssets,
-      total_liabilities: data.totalLiabilities,
-      net_worth: data.netWorth,
-      base_currency: baseCurrency,
-      snapshot_date: new Date().toISOString().split('T')[0],
-    })
+    setSnapshotError(null)
+    try {
+      await createSnapshot.mutateAsync({
+        total_assets: data.totalAssets,
+        total_liabilities: data.totalLiabilities,
+        net_worth: data.netWorth,
+        base_currency: baseCurrency,
+        snapshot_date: new Date().toISOString().split('T')[0],
+      })
+    } catch (err) {
+      setSnapshotError(extractErrorMessage(err) || '快照儲存失敗')
+    }
   }
 
   if (isLoading) {
@@ -60,10 +67,13 @@ export default function Dashboard() {
           <h1 className="text-2xl font-bold text-white">儀表板</h1>
           <p className="text-sm text-[hsl(240_5%_64.9%)]">資產總覽</p>
         </div>
-        <Button variant="outline" size="sm" onClick={handleSaveSnapshot} disabled={createSnapshot.isPending}>
-          <Save className="h-4 w-4" />
-          儲存快照
-        </Button>
+        <div className="flex flex-col items-end gap-1">
+          <Button variant="outline" size="sm" onClick={handleSaveSnapshot} disabled={createSnapshot.isPending}>
+            <Save className="h-4 w-4" />
+            儲存快照
+          </Button>
+          {snapshotError && <p className="text-xs text-red-400">{snapshotError}</p>}
+        </div>
       </div>
 
       <div className="grid gap-4 md:grid-cols-3">

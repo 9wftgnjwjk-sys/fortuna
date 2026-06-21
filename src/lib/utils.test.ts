@@ -1,5 +1,5 @@
-import { describe, it, expect } from 'vitest'
-import { cn, formatCurrency, formatNumber, formatDate } from './utils'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { cn, formatCurrency, formatNumber, formatDate, computeLiabilityBalance, computePayoffDate, extractErrorMessage } from './utils'
 
 describe('cn', () => {
   it('merges class names', () => {
@@ -108,5 +108,81 @@ describe('formatDate', () => {
     const result = formatDate('2025-01-01T00:00:00.000Z')
     // Depending on timezone, date might shift; just assert format pattern
     expect(result).toMatch(/\d{4}\/\d{2}\/\d{2}/)
+  })
+})
+
+describe('computeLiabilityBalance', () => {
+  beforeEach(() => {
+    vi.useFakeTimers()
+  })
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('returns balance unchanged when no monthly_payment', () => {
+    expect(computeLiabilityBalance({ balance: 500_000, monthly_payment: null, payment_start_date: null })).toBe(500_000)
+  })
+
+  it('returns balance unchanged when no payment_start_date', () => {
+    expect(computeLiabilityBalance({ balance: 500_000, monthly_payment: 10_000, payment_start_date: null })).toBe(500_000)
+  })
+
+  it('deducts monthly payments for elapsed months', () => {
+    vi.setSystemTime(new Date('2026-06-01'))
+    // started 2026-03-01 → 3 months elapsed, 10000/month
+    const result = computeLiabilityBalance({ balance: 500_000, monthly_payment: 10_000, payment_start_date: '2026-03-01' })
+    expect(result).toBe(470_000)
+  })
+
+  it('clamps to zero when payments exceed balance', () => {
+    vi.setSystemTime(new Date('2030-01-01'))
+    const result = computeLiabilityBalance({ balance: 100_000, monthly_payment: 10_000, payment_start_date: '2026-01-01' })
+    expect(result).toBe(0)
+  })
+
+  it('returns full balance when start date is in the future', () => {
+    vi.setSystemTime(new Date('2026-01-01'))
+    const result = computeLiabilityBalance({ balance: 500_000, monthly_payment: 10_000, payment_start_date: '2026-06-01' })
+    expect(result).toBe(500_000)
+  })
+})
+
+describe('computePayoffDate', () => {
+  it('returns null when monthly_payment is missing', () => {
+    expect(computePayoffDate({ balance: 500_000, monthly_payment: null, payment_start_date: '2026-01-01' })).toBeNull()
+  })
+
+  it('returns null when payment_start_date is missing', () => {
+    expect(computePayoffDate({ balance: 500_000, monthly_payment: 10_000, payment_start_date: null })).toBeNull()
+  })
+
+  it('computes correct payoff month', () => {
+    // 120000 / 10000 = 12 months; start 2026-01 → payoff 2027-01
+    const result = computePayoffDate({ balance: 120_000, monthly_payment: 10_000, payment_start_date: '2026-01-01' })
+    expect(result).toBe('2027/01')
+  })
+
+  it('rounds up partial months', () => {
+    // 125000 / 10000 = 12.5 → ceil = 13 months; start 2026-01 → payoff 2027-02
+    const result = computePayoffDate({ balance: 125_000, monthly_payment: 10_000, payment_start_date: '2026-01-01' })
+    expect(result).toBe('2027/02')
+  })
+})
+
+describe('extractErrorMessage', () => {
+  it('extracts message from Error instance', () => {
+    expect(extractErrorMessage(new Error('something went wrong'))).toBe('something went wrong')
+  })
+
+  it('extracts message from plain object with message property', () => {
+    expect(extractErrorMessage({ message: 'db error' })).toBe('db error')
+  })
+
+  it('falls back to JSON.stringify for unknown shapes', () => {
+    expect(extractErrorMessage(42)).toBe('42')
+  })
+
+  it('returns empty string equivalent for null/undefined message', () => {
+    expect(extractErrorMessage({})).toBe('{}')
   })
 })

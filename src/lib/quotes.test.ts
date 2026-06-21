@@ -152,9 +152,11 @@ describe('fetchQuote — stocks (Yahoo Finance)', () => {
   }
 
   it('appends .TW suffix for 台股', async () => {
-    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
-      mockYahooResponse(1000, 'TWD', '台積電')
-    )
+    // tw_stock triggers both Yahoo Finance AND TWSE/TPEX fetches in parallel;
+    // mock all subsequent calls so no real HTTP requests escape to the network in CI
+    const fetchSpy = vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(mockYahooResponse(1000, 'TWD', '台積電'))
+      .mockResolvedValue({ ok: false } as Response)
 
     await fetchQuote('2330', 'tw_stock')
     expect(fetchSpy).toHaveBeenCalledWith(
@@ -199,9 +201,10 @@ describe('fetchQuote — stocks (Yahoo Finance)', () => {
   })
 
   it('maps TWD currency correctly', async () => {
-    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
-      mockYahooResponse(1000, 'TWD', '台積電')
-    )
+    // mock Yahoo + all TWSE/TPEX fallbacks to prevent network calls in CI
+    vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(mockYahooResponse(1000, 'TWD', '台積電'))
+      .mockResolvedValue({ ok: false } as Response)
 
     const result = await fetchQuote('2330', 'tw_stock')
     expect(result?.currency).toBe('TWD')

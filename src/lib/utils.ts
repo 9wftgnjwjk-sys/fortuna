@@ -62,6 +62,12 @@ export function computePayoffDate(l: {
   return `${start.getFullYear()}/${String(start.getMonth() + 1).padStart(2, '0')}`
 }
 
+export function extractErrorMessage(err: unknown): string {
+  if (err instanceof Error) return err.message
+  const cast = err as { message?: string }
+  return cast?.message ?? JSON.stringify(err)
+}
+
 export function formatDate(dateStr: string): string {
   return new Date(dateStr).toLocaleDateString('zh-TW', {
     year: 'numeric',

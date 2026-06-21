@@ -12,8 +12,9 @@ import { usePositions, useCreatePosition, useUpdatePosition, useDeletePosition }
 import { usePrices } from '@/hooks/usePrices'
 import { useStockTransactions, useCreateStockTransaction, useImportStockTransactions, useDeleteStockTransaction } from '@/hooks/useStockTransactions'
 import { fetchQuote } from '@/lib/quotes'
-import { formatCurrency } from '@/lib/utils'
-import type { Account, Position, AccountType, PositionType, Currency } from '@/types'
+import { formatCurrency, extractErrorMessage } from '@/lib/utils'
+import { parseCathayCSV } from '@/lib/csv'
+import type { Account, Position, AccountType, PositionType, Currency, StockTransaction } from '@/types'
 
 const accountTypeLabels: Record<AccountType, string> = {
   cash: '現金', bank: '銀行', real_estate: '房產', other: '其他',
@@ -33,25 +34,6 @@ const defaultAccountForm: AccountForm = { name: '', type: 'bank', currency: 'TWD
 const defaultPositionForm: PositionForm = { name: '', symbol: '', type: 'tw_stock', quantity: '', currency: 'TWD', cost_price: '' }
 const defaultTxForm: TxForm = { transaction_date: new Date().toISOString().split('T')[0], quantity: '', price: '', note: '' }
 
-function parseCathayCSV(text: string, positionId: string): Array<Omit<import('@/types').StockTransaction, 'id' | 'user_id' | 'created_at'>> {
-  const lines = text.split('\n').map((l) => l.trim()).filter(Boolean)
-  // first line is summary text, second line is header → skip both
-  const dataLines = lines.slice(2)
-  const results: Array<Omit<import('@/types').StockTransaction, 'id' | 'user_id' | 'created_at'>> = []
-  for (const line of dataLines) {
-    const cols = line.split(',').map((c) => c.replace(/^"|"$/g, '').replace(/,/g, '').trim())
-    // cols: 股名,日期,成交股數,淨收付金額,買賣別,成交價,...
-    const type = cols[4]
-    if (type !== '現買') continue
-    const rawDate = cols[1] // "2026/06/15"
-    const date = rawDate.replace(/\//g, '-')
-    const quantity = parseFloat(cols[2].replace(/,/g, ''))
-    const price = parseFloat(cols[5].replace(/,/g, ''))
-    if (!date || isNaN(quantity) || isNaN(price)) continue
-    results.push({ position_id: positionId, transaction_date: date, quantity, price, note: null })
-  }
-  return results
-}
 
 function TransactionDialog({ position, onClose }: { position: Position; onClose: () => void }) {
   const currentPriceFromHook = usePrices([position.symbol])
@@ -63,7 +45,7 @@ function TransactionDialog({ position, onClose }: { position: Position; onClose:
   const [txForm, setTxForm] = useState<TxForm>(defaultTxForm)
   const [txError, setTxError] = useState<string | null>(null)
   const [importPreview, setImportPreview] = useState<Array<{ date: string; qty: number; price: number }> | null>(null)
-  const [pendingRows, setPendingRows] = useState<Array<Omit<import('@/types').StockTransaction, 'id' | 'user_id' | 'created_at'>> | null>(null)
+  const [pendingRows, setPendingRows] = useState<Array<Omit<StockTransaction, 'id' | 'user_id' | 'created_at'>> | null>(null)
 
   const totalShares = transactions.reduce((s, t) => s + t.quantity, 0)
   const totalCost = transactions.reduce((s, t) => s + t.quantity * t.price, 0)
@@ -86,8 +68,7 @@ function TransactionDialog({ position, onClose }: { position: Position; onClose:
       })
       setTxForm(defaultTxForm)
     } catch (err) {
-      const msg = err instanceof Error ? err.message : (err as { message?: string })?.message ?? JSON.stringify(err)
-      setTxError(msg || '新增失敗')
+      setTxError(extractErrorMessage(err) || '新增失敗')
     }
   }
 
@@ -117,8 +98,7 @@ function TransactionDialog({ position, onClose }: { position: Position; onClose:
       setImportPreview(null)
       setPendingRows(null)
     } catch (err) {
-      const msg = err instanceof Error ? err.message : (err as { message?: string })?.message ?? JSON.stringify(err)
-      setTxError(msg || '匯入失敗')
+      setTxError(extractErrorMessage(err) || '匯入失敗')
     }
   }
 
@@ -265,32 +245,40 @@ export default function Assets() {
   const [accountForm, setAccountForm] = useState<AccountForm>(defaultAccountForm)
   const [positionForm, setPositionForm] = useState<PositionForm>(defaultPositionForm)
   const [symbolLooking, setSymbolLooking] = useState(false)
+  const [accountSaveError, setAccountSaveError] = useState<string | null>(null)
   const [saveError, setSaveError] = useState<string | null>(null)
   const [txPosition, setTxPosition] = useState<Position | null>(null)
 
   function openNewAccount() {
     setAccountForm(defaultAccountForm)
+    setAccountSaveError(null)
     setAccountDialog({ open: true, editing: null })
   }
 
   function openEditAccount(a: Account) {
     setAccountForm({ name: a.name, type: a.type, currency: a.currency, balance: String(a.balance) })
+    setAccountSaveError(null)
     setAccountDialog({ open: true, editing: a })
   }
 
   async function handleSaveAccount() {
+    setAccountSaveError(null)
     const payload = {
       name: accountForm.name,
       type: accountForm.type,
       currency: accountForm.currency,
       balance: parseFloat(accountForm.balance) || 0,
     }
-    if (accountDialog.editing) {
-      await updateAccount.mutateAsync({ id: accountDialog.editing.id, ...payload })
-    } else {
-      await createAccount.mutateAsync(payload)
+    try {
+      if (accountDialog.editing) {
+        await updateAccount.mutateAsync({ id: accountDialog.editing.id, ...payload })
+      } else {
+        await createAccount.mutateAsync(payload)
+      }
+      setAccountDialog({ open: false, editing: null })
+    } catch (err) {
+      setAccountSaveError(extractErrorMessage(err) || '儲存失敗，請再試一次')
     }
-    setAccountDialog({ open: false, editing: null })
   }
 
   async function handleSymbolBlur() {
@@ -335,10 +323,7 @@ export default function Assets() {
       }
       setPositionDialog({ open: false, editing: null })
     } catch (err) {
-      const msg = err instanceof Error ? err.message
-        : (err as { message?: string })?.message
-        ?? JSON.stringify(err)
-      setSaveError(msg || '儲存失敗，請再試一次')
+      setSaveError(extractErrorMessage(err) || '儲存失敗，請再試一次')
     }
   }
 
@@ -469,6 +454,7 @@ export default function Assets() {
               </div>
             </div>
           </div>
+          {accountSaveError && <p className="text-sm text-red-400">{accountSaveError}</p>}
           <DialogFooter>
             <Button variant="outline" onClick={() => setAccountDialog({ open: false, editing: null })}>取消</Button>
             <Button onClick={handleSaveAccount} disabled={createAccount.isPending || updateAccount.isPending}>儲存</Button>
