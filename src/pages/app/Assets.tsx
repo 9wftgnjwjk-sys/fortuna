@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react'
-import { Plus, Pencil, Trash2, Loader2, History, X } from 'lucide-react'
+import { Plus, Pencil, Trash2, Loader2, History, X, Upload } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useAccounts, useCreateAccount, useUpdateAccount, useDeleteAccount } from '@/hooks/useAccounts'
 import { usePositions, useCreatePosition, useUpdatePosition, useDeletePosition } from '@/hooks/usePositions'
 import { usePrices } from '@/hooks/usePrices'
-import { useStockTransactions, useCreateStockTransaction, useDeleteStockTransaction } from '@/hooks/useStockTransactions'
+import { useStockTransactions, useCreateStockTransaction, useImportStockTransactions, useDeleteStockTransaction } from '@/hooks/useStockTransactions'
 import { fetchQuote } from '@/lib/quotes'
 import { formatCurrency } from '@/lib/utils'
 import type { Account, Position, AccountType, PositionType, Currency } from '@/types'
@@ -33,13 +33,37 @@ const defaultAccountForm: AccountForm = { name: '', type: 'bank', currency: 'TWD
 const defaultPositionForm: PositionForm = { name: '', symbol: '', type: 'tw_stock', quantity: '', currency: 'TWD', cost_price: '' }
 const defaultTxForm: TxForm = { transaction_date: new Date().toISOString().split('T')[0], quantity: '', price: '', note: '' }
 
+function parseCathayCSV(text: string, positionId: string): Array<Omit<import('@/types').StockTransaction, 'id' | 'user_id' | 'created_at'>> {
+  const lines = text.split('\n').map((l) => l.trim()).filter(Boolean)
+  // first line is summary text, second line is header → skip both
+  const dataLines = lines.slice(2)
+  const results: Array<Omit<import('@/types').StockTransaction, 'id' | 'user_id' | 'created_at'>> = []
+  for (const line of dataLines) {
+    const cols = line.split(',').map((c) => c.replace(/^"|"$/g, '').replace(/,/g, '').trim())
+    // cols: 股名,日期,成交股數,淨收付金額,買賣別,成交價,...
+    const type = cols[4]
+    if (type !== '現買') continue
+    const rawDate = cols[1] // "2026/06/15"
+    const date = rawDate.replace(/\//g, '-')
+    const quantity = parseFloat(cols[2].replace(/,/g, ''))
+    const price = parseFloat(cols[5].replace(/,/g, ''))
+    if (!date || isNaN(quantity) || isNaN(price)) continue
+    results.push({ position_id: positionId, transaction_date: date, quantity, price, note: null })
+  }
+  return results
+}
+
 function TransactionDialog({ position, onClose }: { position: Position; onClose: () => void }) {
   const currentPriceFromHook = usePrices([position.symbol])
   const currentPrice = currentPriceFromHook.data?.[position.symbol]?.price ?? null
   const { data: transactions = [], isLoading } = useStockTransactions(position.id)
   const createTx = useCreateStockTransaction()
+  const importTx = useImportStockTransactions()
   const deleteTx = useDeleteStockTransaction()
   const [txForm, setTxForm] = useState<TxForm>(defaultTxForm)
+  const [txError, setTxError] = useState<string | null>(null)
+  const [importPreview, setImportPreview] = useState<Array<{ date: string; qty: number; price: number }> | null>(null)
+  const [pendingRows, setPendingRows] = useState<Array<Omit<import('@/types').StockTransaction, 'id' | 'user_id' | 'created_at'>> | null>(null)
 
   const totalShares = transactions.reduce((s, t) => s + t.quantity, 0)
   const totalCost = transactions.reduce((s, t) => s + t.quantity * t.price, 0)
@@ -51,14 +75,51 @@ function TransactionDialog({ position, onClose }: { position: Position; onClose:
 
   async function handleAddTx() {
     if (!txForm.quantity || !txForm.price) return
-    await createTx.mutateAsync({
-      position_id: position.id,
-      transaction_date: txForm.transaction_date,
-      quantity: parseFloat(txForm.quantity),
-      price: parseFloat(txForm.price),
-      note: txForm.note || null,
-    })
-    setTxForm(defaultTxForm)
+    setTxError(null)
+    try {
+      await createTx.mutateAsync({
+        position_id: position.id,
+        transaction_date: txForm.transaction_date,
+        quantity: parseFloat(txForm.quantity),
+        price: parseFloat(txForm.price),
+        note: txForm.note || null,
+      })
+      setTxForm(defaultTxForm)
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : (err as { message?: string })?.message ?? JSON.stringify(err)
+      setTxError(msg || '新增失敗')
+    }
+  }
+
+  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = (ev) => {
+      const text = ev.target?.result as string
+      const rows = parseCathayCSV(text, position.id)
+      if (rows.length === 0) {
+        setTxError('CSV 中找不到「現買」記錄，請確認格式為國泰證券交易明細')
+        return
+      }
+      setPendingRows(rows)
+      setImportPreview(rows.map((r) => ({ date: r.transaction_date, qty: r.quantity, price: r.price })))
+    }
+    reader.readAsText(file, 'UTF-8')
+    e.target.value = ''
+  }
+
+  async function handleConfirmImport() {
+    if (!pendingRows) return
+    setTxError(null)
+    try {
+      await importTx.mutateAsync(pendingRows)
+      setImportPreview(null)
+      setPendingRows(null)
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : (err as { message?: string })?.message ?? JSON.stringify(err)
+      setTxError(msg || '匯入失敗')
+    }
   }
 
   return (
@@ -97,7 +158,7 @@ function TransactionDialog({ position, onClose }: { position: Position; onClose:
         </div>
 
         {/* 交易清單 */}
-        <div className="max-h-48 overflow-y-auto space-y-1.5">
+        <div className="max-h-44 overflow-y-auto space-y-1.5">
           {isLoading
             ? <div className="flex justify-center py-4"><Loader2 className="h-5 w-5 animate-spin text-[hsl(240_5%_64.9%)]" /></div>
             : transactions.length === 0
@@ -120,9 +181,43 @@ function TransactionDialog({ position, onClose }: { position: Position; onClose:
           }
         </div>
 
+        {/* CSV 匯入預覽 */}
+        {importPreview && (
+          <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 space-y-2">
+            <p className="text-xs font-semibold text-amber-400">預覽匯入 {importPreview.length} 筆（僅現買）</p>
+            <div className="max-h-28 overflow-y-auto space-y-1">
+              {importPreview.slice(0, 8).map((r, i) => (
+                <div key={i} className="flex gap-3 text-xs text-white">
+                  <span className="text-[hsl(240_5%_64.9%)]">{r.date}</span>
+                  <span>{r.qty} 股</span>
+                  <span>@ {r.price}</span>
+                </div>
+              ))}
+              {importPreview.length > 8 && (
+                <p className="text-xs text-[hsl(240_5%_64.9%)]">…還有 {importPreview.length - 8} 筆</p>
+              )}
+            </div>
+            <div className="flex gap-2">
+              <Button size="sm" onClick={handleConfirmImport} disabled={importTx.isPending}>
+                {importTx.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : '確認匯入'}
+              </Button>
+              <Button size="sm" variant="outline" onClick={() => { setImportPreview(null); setPendingRows(null) }}>取消</Button>
+            </div>
+          </div>
+        )}
+
+        {txError && <p className="text-sm text-red-400">{txError}</p>}
+
         {/* 新增表單 */}
         <div className="border-t border-[hsl(240_3.7%_15.9%)] pt-4 space-y-3">
-          <p className="text-xs font-semibold uppercase tracking-wide text-[hsl(240_5%_64.9%)]">新增一筆</p>
+          <div className="flex items-center justify-between">
+            <p className="text-xs font-semibold uppercase tracking-wide text-[hsl(240_5%_64.9%)]">手動新增一筆</p>
+            <label className="flex cursor-pointer items-center gap-1.5 rounded-md border border-[hsl(240_3.7%_15.9%)] px-2 py-1 text-xs text-[hsl(240_5%_64.9%)] hover:text-white hover:border-white transition-colors">
+              <Upload className="h-3 w-3" />
+              匯入 CSV
+              <input type="file" accept=".csv" className="hidden" onChange={handleFileChange} />
+            </label>
+          </div>
           <div className="grid grid-cols-3 gap-2">
             <div className="space-y-1">
               <Label className="text-xs">日期</Label>

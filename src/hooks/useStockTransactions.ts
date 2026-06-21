@@ -34,6 +34,24 @@ export function useCreateStockTransaction() {
   })
 }
 
+export function useImportStockTransactions() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (rows: Array<Omit<StockTransaction, 'id' | 'user_id' | 'created_at'>>) => {
+      const { data, error } = await supabase
+        .from('stock_transactions')
+        .insert(rows)
+        .select()
+      if (error) throw error
+      return data as StockTransaction[]
+    },
+    onSuccess: (data) => {
+      const positionId = data[0]?.position_id
+      if (positionId) qc.invalidateQueries({ queryKey: ['stock_transactions', positionId] })
+    },
+  })
+}
+
 export function useDeleteStockTransaction() {
   const qc = useQueryClient()
   return useMutation({
