@@ -5,8 +5,12 @@ import {
 } from 'recharts'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { useNetWorth } from '@/hooks/useNetWorth'
+import { useAccounts } from '@/hooks/useAccounts'
+import { useExchangeRates } from '@/hooks/useExchangeRates'
 import { useSettingsStore } from '@/store/settings'
+import { convertCurrency } from '@/lib/currency'
 import { formatCurrency } from '@/lib/utils'
+import type { Currency } from '@/types'
 
 const DRILL_COLORS = ['#3b82f6', '#f59e0b', '#8b5cf6', '#06b6d4', '#ec4899', '#22c55e', '#ef4444']
 
@@ -31,7 +35,23 @@ function StatCard({
 export default function Dashboard() {
   const baseCurrency = useSettingsStore((s) => s.baseCurrency)
   const { data, isLoading } = useNetWorth()
+  const { data: accounts = [] } = useAccounts()
+  const { data: rates } = useExchangeRates()
   const [drillCategory, setDrillCategory] = useState<'cash' | 'investment' | null>(null)
+
+  // Non-base currencies used in cash accounts
+  const foreignCurrencies = [...new Set(
+    accounts
+      .filter((a) => a.currency !== baseCurrency)
+      .map((a) => a.currency as Currency)
+  )]
+
+  const ratesUpdatedAt = rates?.timestamp
+    ? new Date(rates.timestamp).toLocaleString('zh-TW', {
+        month: '2-digit', day: '2-digit',
+        hour: '2-digit', minute: '2-digit', hour12: false,
+      })
+    : null
 
   if (isLoading) {
     return (
@@ -221,6 +241,31 @@ export default function Dashboard() {
                   ))}
                 </div>
               </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* 匯率 */}
+      {foreignCurrencies.length > 0 && rates && (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle>匯率</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {foreignCurrencies.map((currency) => {
+              const rate = convertCurrency(1, currency, baseCurrency as Currency, rates)
+              return (
+                <div key={currency} className="flex items-center justify-between text-sm">
+                  <span className="text-[hsl(240_5%_64.9%)]">1 {currency}</span>
+                  <span className="font-semibold text-white">
+                    = {rate.toLocaleString('zh-TW', { minimumFractionDigits: 2, maximumFractionDigits: 4 })} {baseCurrency}
+                  </span>
+                </div>
+              )
+            })}
+            {ratesUpdatedAt && (
+              <p className="pt-1 text-xs text-[hsl(240_5%_40%)]">更新時間：{ratesUpdatedAt}</p>
             )}
           </CardContent>
         </Card>
