@@ -15,6 +15,9 @@
   - 台股代號自動帶出股票名稱（每日排程更新）
 - **買入記錄** — 點選部位可新增每筆買入明細（日期、股數、價格），自動計算加權均價與報酬率
   - 支援匯入**國泰證券 CSV 交易明細**（自動過濾現買記錄）
+- **股票分割回溯調整** — 點選部位的 History 圖示，在「股票分割調整」區塊中：
+  - 點「自動查詢分割記錄」，系統從 TWSE 歷史股價偵測分割事件（台股），自動帶入分割日期與比例
+  - 確認後按「套用」，程式回溯調整分割日前的所有買入記錄（股數 × 比例、成本 ÷ 比例）
 
 ### 負債
 - **負債管理** — 房貸、信貸與其他負債
@@ -49,7 +52,7 @@
 | 資料抓取 | TanStack React Query |
 | 後端/資料庫 | Supabase（PostgreSQL + Auth + RLS） |
 | 圖示 | Lucide React |
-| 測試 | Vitest + Testing Library（106 個測試） |
+| 測試 | Vitest + Testing Library（120 個測試） |
 | CI/CD | GitHub Actions |
 
 ---
@@ -119,6 +122,20 @@ python fetch_prices.py
 
 ---
 
+## 股票分割調整
+
+當持有股票發生分割（如 0050 1拆4、00631L 1拆23），需回溯調整買入記錄：
+
+1. 在「資產」頁面點選部位的 **History** 圖示
+2. 在「股票分割調整」區塊點「**自動查詢分割記錄**」
+3. 系統向 TWSE 查詢最近 24 個月歷史股價，從收盤價的大幅落差（前一日 / 當日 ≥ 1.5 且接近整數）自動偵測分割事件
+4. 查詢結果以綠色晶片顯示，點選後自動填入分割日期與比例
+5. 確認無誤後按「**套用**」：程式將分割日前的所有買入記錄批次調整（股數 × 比例、成交價 ÷ 比例），並同步更新 `positions.cost_price`
+
+> 美股、日股、港股使用 Yahoo Finance 查詢；台股不適用 Yahoo Finance，改用 TWSE afterTrading API（CORS 友善）。
+
+---
+
 ## 指令
 
 ```bash
@@ -135,7 +152,7 @@ npm run test:run       # 測試（單次執行）
 ```
 accounts            -- 現金、銀行、房產帳戶
 positions           -- 投資部位（股票、加密貨幣）；含 cost_price 買入均價
-stock_transactions  -- 每筆買入記錄（date, quantity, price）
+stock_transactions  -- 每筆買入記錄（date, quantity, price）；user_id DEFAULT auth.uid()
 liabilities         -- 負債；含 monthly_payment + payment_start_date 自動計算剩餘
 prices              -- 每日盤後價格（Python 腳本更新，全使用者共用）
 net_worth_snapshots -- 淨資產歷史快照
