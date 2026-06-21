@@ -105,7 +105,8 @@ export function usePortfolioTrend(monthsBack = 13) {
           const mid = (lo + hi) >> 1
           if (entries[mid].date <= date) { result = mid; lo = mid + 1 } else { hi = mid - 1 }
         }
-        return result === -1 ? null : entries[result].cumQty
+        // result === -1 means all transactions are after `date` → 0 shares held yet (not a fallback case)
+        return result === -1 ? 0 : entries[result].cumQty
       }
 
       const allDates = new Set<string>()
