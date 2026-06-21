@@ -1,4 +1,5 @@
 name: Fetch Daily Prices
+# 每日從 TWSE/TPEX/Yahoo Finance 抓取收盤價並更新 Supabase
 
 on:
   schedule:
