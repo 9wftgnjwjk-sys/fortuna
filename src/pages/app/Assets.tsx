@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { Plus, Pencil, Trash2, Loader2 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -9,6 +9,7 @@ import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useAccounts, useCreateAccount, useUpdateAccount, useDeleteAccount } from '@/hooks/useAccounts'
 import { usePositions, useCreatePosition, useUpdatePosition, useDeletePosition } from '@/hooks/usePositions'
+import { usePrices } from '@/hooks/usePrices'
 import { fetchQuote } from '@/lib/quotes'
 import { formatCurrency } from '@/lib/utils'
 import type { Account, Position, AccountType, PositionType, Currency } from '@/types'
@@ -38,6 +39,9 @@ export default function Assets() {
   const createPosition = useCreatePosition()
   const updatePosition = useUpdatePosition()
   const deletePosition = useDeletePosition()
+
+  const positionSymbols = useMemo(() => positions.map((p) => p.symbol), [positions])
+  const { data: prices = {} } = usePrices(positionSymbols)
 
   const [accountDialog, setAccountDialog] = useState<{ open: boolean; editing: Account | null }>({ open: false, editing: null })
   const [positionDialog, setPositionDialog] = useState<{ open: boolean; editing: Position | null }>({ open: false, editing: null })
@@ -169,25 +173,39 @@ export default function Assets() {
             ? <p className="text-center text-sm text-[hsl(240_5%_64.9%)] py-8">尚無投資部位</p>
             : (
               <div className="space-y-2">
-                {positions.map((p) => (
-                  <div key={p.id} className="flex items-center justify-between rounded-lg bg-[hsl(240_3.7%_8%)] px-4 py-3">
-                    <div className="flex items-center gap-3">
-                      <Badge variant="secondary">{positionTypeLabels[p.type]}</Badge>
-                      <div>
-                        <span className="font-mono text-sm text-[hsl(142.1_76.2%_56%)]">{p.symbol}</span>
-                        <span className="ml-2 text-white">{p.name}</span>
+                {positions.map((p) => {
+                  const currentPrice = prices[p.symbol]?.price ?? null
+                  const returnRate = p.cost_price != null && currentPrice != null
+                    ? (currentPrice - p.cost_price) / p.cost_price * 100
+                    : null
+                  return (
+                    <div key={p.id} className="flex items-center justify-between rounded-lg bg-[hsl(240_3.7%_8%)] px-4 py-3">
+                      <div className="flex items-center gap-3">
+                        <Badge variant="secondary">{positionTypeLabels[p.type]}</Badge>
+                        <div>
+                          <span className="font-mono text-sm text-[hsl(142.1_76.2%_56%)]">{p.symbol}</span>
+                          <span className="ml-2 text-white">{p.name}</span>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <span className="text-sm text-[hsl(240_5%_64.9%)]">× {p.quantity}</span>
+                        {currentPrice != null && (
+                          <span className="text-sm text-white">現價 {formatCurrency(currentPrice, p.currency)}</span>
+                        )}
+                        {p.cost_price != null && (
+                          <span className="text-xs text-[hsl(240_5%_64.9%)]">均價 {formatCurrency(p.cost_price, p.currency)}</span>
+                        )}
+                        {returnRate != null && (
+                          <span className={`text-sm font-semibold ${returnRate >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                            {returnRate >= 0 ? '+' : ''}{returnRate.toFixed(2)}%
+                          </span>
+                        )}
+                        <button onClick={() => openEditPosition(p)} className="text-[hsl(240_5%_64.9%)] hover:text-white"><Pencil className="h-4 w-4" /></button>
+                        <button onClick={() => deletePosition.mutate(p.id)} className="text-[hsl(240_5%_64.9%)] hover:text-red-400"><Trash2 className="h-4 w-4" /></button>
                       </div>
                     </div>
-                    <div className="flex items-center gap-3">
-                      <span className="text-sm text-[hsl(240_5%_64.9%)]">× {p.quantity}</span>
-                      {p.cost_price && (
-                        <span className="text-xs text-[hsl(240_5%_64.9%)]">均價 {formatCurrency(p.cost_price, p.currency)}</span>
-                      )}
-                      <button onClick={() => openEditPosition(p)} className="text-[hsl(240_5%_64.9%)] hover:text-white"><Pencil className="h-4 w-4" /></button>
-                      <button onClick={() => deletePosition.mutate(p.id)} className="text-[hsl(240_5%_64.9%)] hover:text-red-400"><Trash2 className="h-4 w-4" /></button>
-                    </div>
-                  </div>
-                ))}
+                  )
+                })}
               </div>
             )
           }

@@ -56,15 +56,56 @@ async function fetchCryptoQuote(symbol: string): Promise<QuoteResult | null> {
   }
 }
 
+async function fetchTwStockName(symbol: string): Promise<string | null> {
+  // 嘗試 TWSE（上市）
+  try {
+    const res = await fetch(
+      `https://www.twse.com.tw/rwd/zh/afterTrading/STOCK_DAY?stockNo=${symbol}&response=json`
+    )
+    if (res.ok) {
+      const data = await res.json()
+      const title: string = data?.title ?? ''
+      if (title) {
+        // title 格式: "113年12月 2330 台積電           每日收盤行情"
+        const beforeLabel = title.split('每日收盤行情')[0]
+        const match = beforeLabel.match(new RegExp(`${symbol}\\s+(.+?)\\s*$`))
+        if (match?.[1]?.trim()) return match[1].trim()
+      }
+    }
+  } catch { /* CORS 或網路錯誤，繼續嘗試 TPEX */ }
+
+  // 嘗試 TPEX（上櫃）
+  try {
+    const res = await fetch(
+      'https://www.tpex.org.tw/openapi/v1/tpex_mainboard_daily_close_quotes'
+    )
+    if (res.ok) {
+      const rows: Record<string, string>[] = await res.json()
+      const row = rows.find((r) => r.SecuritiesCompanyCode === symbol)
+      if (row) {
+        const name = row.CompanyName ?? row.Name ?? row.SecuritiesCompanyName
+        if (name) return name
+      }
+    }
+  } catch { /* CORS 或網路錯誤 */ }
+
+  return null
+}
+
 async function fetchStockQuote(symbol: string, type: string): Promise<QuoteResult | null> {
-  // 使用 Yahoo Finance v8 非官方端點
   const suffix = getExchangeSuffix(type)
   const ticker = suffix ? `${symbol}.${suffix}` : symbol
-  const res = await fetch(
-    `https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?interval=1d&range=1d`,
-    { headers: { 'User-Agent': 'Mozilla/5.0' } }
-  )
-  if (!res.ok) return null
+
+  // 台股同時查詢 Yahoo Finance 和 TWSE 中文名稱
+  const [res, twName] = await Promise.all([
+    fetch(
+      `https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?interval=1d&range=1d`,
+      { headers: { 'User-Agent': 'Mozilla/5.0' } }
+    ).catch(() => null),
+    type === 'tw_stock' ? fetchTwStockName(symbol) : Promise.resolve(null),
+  ])
+
+  if (!res?.ok) return null
   const data = await res.json()
   const meta = data?.chart?.result?.[0]?.meta
   if (!meta) return null
@@ -77,7 +118,7 @@ async function fetchStockQuote(symbol: string, type: string): Promise<QuoteResul
     symbol,
     price: meta.regularMarketPrice ?? meta.previousClose,
     currency: currencyMap[meta.currency] ?? 'USD',
-    name: meta.shortName,
+    name: twName ?? meta.shortName,
   }
 }
 
