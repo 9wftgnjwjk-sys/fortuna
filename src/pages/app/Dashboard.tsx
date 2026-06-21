@@ -2,17 +2,78 @@ import { useState } from 'react'
 import { TrendingUp, TrendingDown, DollarSign, Loader2, ChevronLeft, RefreshCw } from 'lucide-react'
 import {
   PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Legend,
+  AreaChart, Area, XAxis, YAxis, CartesianGrid,
 } from 'recharts'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { useNetWorth } from '@/hooks/useNetWorth'
 import { useAccounts } from '@/hooks/useAccounts'
 import { useExchangeRates } from '@/hooks/useExchangeRates'
+import { usePortfolioTrend, type TrendPoint } from '@/hooks/usePortfolioTrend'
 import { useSettingsStore } from '@/store/settings'
 import { convertCurrency } from '@/lib/currency'
 import { formatCurrency } from '@/lib/utils'
 import type { Currency } from '@/types'
 
 const DRILL_COLORS = ['#3b82f6', '#f59e0b', '#8b5cf6', '#06b6d4', '#ec4899', '#22c55e', '#ef4444']
+
+function MiniTrendChart({
+  data, dataKey, color, gradId, baseCurrency,
+}: {
+  data: TrendPoint[]
+  dataKey: keyof TrendPoint
+  color: string
+  gradId: string
+  baseCurrency: string
+}) {
+  return (
+    <ResponsiveContainer width="100%" height={160}>
+      <AreaChart data={data} margin={{ top: 4, right: 4, bottom: 0, left: 0 }}>
+        <defs>
+          <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="5%" stopColor={color} stopOpacity={0.3} />
+            <stop offset="95%" stopColor={color} stopOpacity={0} />
+          </linearGradient>
+        </defs>
+        <CartesianGrid strokeDasharray="3 3" stroke="hsl(240 3.7% 15.9%)" />
+        <XAxis
+          dataKey="date"
+          tick={{ fontSize: 10, fill: 'hsl(240 5% 64.9%)' }}
+          tickFormatter={(v: string) => v.slice(5)}
+          interval="preserveStartEnd"
+        />
+        <YAxis
+          tick={{ fontSize: 10, fill: 'hsl(240 5% 64.9%)' }}
+          tickFormatter={(v: number) => {
+            if (Math.abs(v) >= 1_000_000) return `${(v / 1_000_000).toFixed(1)}M`
+            if (Math.abs(v) >= 1_000) return `${(v / 1_000).toFixed(0)}K`
+            return String(v)
+          }}
+          width={52}
+        />
+        <Tooltip
+          contentStyle={{
+            backgroundColor: 'hsl(240 10% 8%)',
+            border: '1px solid hsl(240 3.7% 15.9%)',
+            borderRadius: '8px',
+            color: 'white',
+            fontSize: 12,
+          }}
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          formatter={(value: any) => [formatCurrency(Number(value), baseCurrency as any)]}
+          labelFormatter={(label: unknown) => String(label)}
+        />
+        <Area
+          type="monotone"
+          dataKey={dataKey as string}
+          stroke={color}
+          strokeWidth={2}
+          fill={`url(#${gradId})`}
+          dot={false}
+        />
+      </AreaChart>
+    </ResponsiveContainer>
+  )
+}
 
 function StatCard({
   title, value, icon: Icon, positive,
@@ -35,6 +96,7 @@ function StatCard({
 export default function Dashboard() {
   const baseCurrency = useSettingsStore((s) => s.baseCurrency)
   const { data, isLoading } = useNetWorth()
+  const { data: trendPoints = [], isLoading: trendLoading } = usePortfolioTrend()
   const { data: accounts = [] } = useAccounts()
   const { data: rates, isFetching: ratesFetching, refresh: refreshRates } = useExchangeRates()
   const [drillCategory, setDrillCategory] = useState<'cash' | 'investment' | null>(null)
@@ -185,6 +247,37 @@ export default function Dashboard() {
               <span>淨資產 {formatCurrency(data.netWorth, baseCurrency)}</span>
               <span>負債 {formatCurrency(data.totalLiabilities, baseCurrency)}</span>
             </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* 資產趨勢 */}
+      {(trendLoading || trendPoints.length > 0) && (
+        <Card>
+          <CardHeader>
+            <CardTitle>資產趨勢</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {trendLoading ? (
+              <div className="flex h-48 items-center justify-center">
+                <Loader2 className="h-5 w-5 animate-spin text-[hsl(240_5%_64.9%)]" />
+              </div>
+            ) : (
+              <div className="space-y-6">
+                <div>
+                  <p className="mb-1 text-xs font-semibold text-[hsl(240_5%_64.9%)]">純投資部位</p>
+                  <MiniTrendChart data={trendPoints} dataKey="investments" color="#3b82f6" gradId="gradInvest" baseCurrency={baseCurrency} />
+                </div>
+                <div>
+                  <p className="mb-1 text-xs font-semibold text-[hsl(240_5%_64.9%)]">投資部位 + 現金</p>
+                  <MiniTrendChart data={trendPoints} dataKey="withCash" color="#f59e0b" gradId="gradWithCash" baseCurrency={baseCurrency} />
+                </div>
+                <div>
+                  <p className="mb-1 text-xs font-semibold text-[hsl(240_5%_64.9%)]">淨資產（扣除負債）</p>
+                  <MiniTrendChart data={trendPoints} dataKey="netWorth" color="#22c55e" gradId="gradNet" baseCurrency={baseCurrency} />
+                </div>
+              </div>
+            )}
           </CardContent>
         </Card>
       )}
