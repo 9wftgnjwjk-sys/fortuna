@@ -55,17 +55,26 @@ export function usePortfolioTrend(monthsBack = 13) {
         return sum + convertCurrency(dbPrice.price * p.quantity, dbPrice.currency as Currency, baseCurrency, rates)
       }, 0)
 
+      // ── Fetch transactions first to determine the required date range ────────
+      const txResult = await (twPositions.length > 0
+        ? supabase
+            .from('stock_transactions')
+            .select('position_id, transaction_date, quantity')
+            .in('position_id', twPositions.map((p) => p.id))
+            .order('transaction_date', { ascending: true })
+        : Promise.resolve({ data: [] }))
+
+      // Calculate months needed to cover the earliest transaction date
+      const allTxDates = (txResult.data ?? []).map((tx: { transaction_date: string }) => tx.transaction_date)
+      const earliestTx = allTxDates[0] ?? null
+      const dynamicMonthsBack = earliestTx
+        ? Math.ceil((Date.now() - new Date(earliestTx).getTime()) / (1000 * 60 * 60 * 24 * 30)) + 1
+        : monthsBack
+
       // ── Fetch daily price history + split events for each tw_stock ─────────
-      const [symbolDataList, txResult] = await Promise.all([
-        Promise.all(twPositions.map((p) => fetchTWSESymbolData(p.symbol, monthsBack))),
-        twPositions.length > 0
-          ? supabase
-              .from('stock_transactions')
-              .select('position_id, transaction_date, quantity')
-              .in('position_id', twPositions.map((p) => p.id))
-              .order('transaction_date', { ascending: true })
-          : Promise.resolve({ data: [] }),
-      ])
+      const symbolDataList = await Promise.all(
+        twPositions.map((p) => fetchTWSESymbolData(p.symbol, dynamicMonthsBack))
+      )
 
       // Group transactions by position for fast lookup
       const txsByPosition = new Map<string, Array<{ date: string; quantity: number }>>()
