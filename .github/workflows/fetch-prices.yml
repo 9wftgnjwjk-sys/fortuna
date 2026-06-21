@@ -23,6 +23,6 @@ jobs:
 
       - name: Fetch and store prices
         env:
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_URL: https://vkaotqgtysfnxvyobpqf.supabase.co
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
         run: python scripts/fetch_prices.py
