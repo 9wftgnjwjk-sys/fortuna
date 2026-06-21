@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useAccounts, useCreateAccount, useUpdateAccount, useDeleteAccount } from '@/hooks/useAccounts'
 import { usePositions, useCreatePosition, useUpdatePosition, useDeletePosition } from '@/hooks/usePositions'
 import { usePrices } from '@/hooks/usePrices'
-import { useStockTransactions, useCreateStockTransaction, useImportStockTransactions, useDeleteStockTransaction } from '@/hooks/useStockTransactions'
+import { useStockTransactions, useCreateStockTransaction, useImportStockTransactions, useApplyStockSplit, useDeleteStockTransaction } from '@/hooks/useStockTransactions'
 import { fetchQuote } from '@/lib/quotes'
 import { formatCurrency, extractErrorMessage } from '@/lib/utils'
 import { parseCathayCSV } from '@/lib/csv'
@@ -41,11 +41,15 @@ function TransactionDialog({ position, onClose }: { position: Position; onClose:
   const { data: transactions = [], isLoading } = useStockTransactions(position.id)
   const createTx = useCreateStockTransaction()
   const importTx = useImportStockTransactions()
+  const applySplit = useApplyStockSplit()
   const deleteTx = useDeleteStockTransaction()
   const [txForm, setTxForm] = useState<TxForm>(defaultTxForm)
   const [txError, setTxError] = useState<string | null>(null)
   const [importPreview, setImportPreview] = useState<Array<{ date: string; qty: number; price: number }> | null>(null)
   const [pendingRows, setPendingRows] = useState<Array<Omit<StockTransaction, 'id' | 'user_id' | 'created_at'>> | null>(null)
+  const [splitDate, setSplitDate] = useState('')
+  const [splitRatio, setSplitRatio] = useState('')
+  const [splitDone, setSplitDone] = useState<number | null>(null)
 
   const totalShares = transactions.reduce((s, t) => s + t.quantity, 0)
   const totalCost = transactions.reduce((s, t) => s + t.quantity * t.price, 0)
@@ -187,6 +191,46 @@ function TransactionDialog({ position, onClose }: { position: Position; onClose:
         )}
 
         {txError && <p className="text-sm text-red-400">{txError}</p>}
+
+        {/* 股票分割回溯調整 */}
+        <div className="border-t border-[hsl(240_3.7%_15.9%)] pt-4 space-y-3">
+          <p className="text-xs font-semibold uppercase tracking-wide text-[hsl(240_5%_64.9%)]">股票分割調整</p>
+          <p className="text-xs text-[hsl(240_5%_50%)]">將分割日前的舊紀錄回溯調整：股數 × 比例，價格 ÷ 比例</p>
+          <div className="grid grid-cols-3 gap-2 items-end">
+            <div className="space-y-1">
+              <Label className="text-xs">分割日期</Label>
+              <Input type="date" value={splitDate} onChange={(e) => { setSplitDate(e.target.value); setSplitDone(null) }} />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">分割比例（1股變幾股）</Label>
+              <Input type="number" min="2" placeholder="例：22" value={splitRatio} onChange={(e) => { setSplitRatio(e.target.value); setSplitDone(null) }} />
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={!splitDate || !splitRatio || applySplit.isPending}
+              onClick={async () => {
+                setTxError(null)
+                setSplitDone(null)
+                try {
+                  const count = await applySplit.mutateAsync({
+                    positionId: position.id,
+                    splitDate,
+                    ratio: parseFloat(splitRatio),
+                  })
+                  setSplitDone(count)
+                } catch (err) {
+                  setTxError(extractErrorMessage(err) || '調整失敗')
+                }
+              }}
+            >
+              {applySplit.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : '套用'}
+            </Button>
+          </div>
+          {splitDone !== null && (
+            <p className="text-xs text-green-400">已調整 {splitDone} 筆分割前紀錄</p>
+          )}
+        </div>
 
         {/* 新增表單 */}
         <div className="border-t border-[hsl(240_3.7%_15.9%)] pt-4 space-y-3">

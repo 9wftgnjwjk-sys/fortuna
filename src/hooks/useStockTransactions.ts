@@ -61,6 +61,41 @@ export function useImportStockTransactions() {
   })
 }
 
+export function useApplyStockSplit() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async ({
+      positionId,
+      splitDate,
+      ratio,
+    }: { positionId: string; splitDate: string; ratio: number }) => {
+      // 取出分割日前的所有交易
+      const { data: txs, error: fetchErr } = await supabase
+        .from('stock_transactions')
+        .select('id, quantity, price')
+        .eq('position_id', positionId)
+        .lt('transaction_date', splitDate)
+      if (fetchErr) throw fetchErr
+      if (!txs || txs.length === 0) return 0
+
+      // 逐筆更新：股數 × ratio，價格 ÷ ratio
+      for (const tx of txs) {
+        const { error } = await supabase
+          .from('stock_transactions')
+          .update({
+            quantity: tx.quantity * ratio,
+            price: tx.price / ratio,
+          })
+          .eq('id', tx.id)
+        if (error) throw error
+      }
+      return txs.length
+    },
+    onSuccess: (_count, { positionId }) =>
+      qc.invalidateQueries({ queryKey: ['stock_transactions', positionId] }),
+  })
+}
+
 export function useDeleteStockTransaction() {
   const qc = useQueryClient()
   return useMutation({
