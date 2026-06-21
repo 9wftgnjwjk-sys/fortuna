@@ -64,7 +64,7 @@ export default function Settings() {
         </CardHeader>
         <CardContent className="text-sm text-[hsl(240_5%_64.9%)] space-y-2">
           <p>資料儲存於 Supabase 雲端，僅限本帳號存取。</p>
-          <p>Percento 不儲存任何銀行密碼或交易憑證。</p>
+          <p>Fortuna 不儲存任何銀行密碼或交易憑證。</p>
         </CardContent>
       </Card>
     </div>
