@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { TrendingUp, TrendingDown, DollarSign, Loader2, ChevronLeft } from 'lucide-react'
+import { TrendingUp, TrendingDown, DollarSign, Loader2, ChevronLeft, RefreshCw } from 'lucide-react'
 import {
   PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Legend,
 } from 'recharts'
@@ -36,7 +36,7 @@ export default function Dashboard() {
   const baseCurrency = useSettingsStore((s) => s.baseCurrency)
   const { data, isLoading } = useNetWorth()
   const { data: accounts = [] } = useAccounts()
-  const { data: rates } = useExchangeRates()
+  const { data: rates, isFetching: ratesFetching, refresh: refreshRates } = useExchangeRates()
   const [drillCategory, setDrillCategory] = useState<'cash' | 'investment' | null>(null)
 
   // Non-base currencies used in cash accounts
@@ -249,8 +249,16 @@ export default function Dashboard() {
       {/* 匯率 */}
       {foreignCurrencies.length > 0 && rates && (
         <Card>
-          <CardHeader className="pb-2">
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle>匯率</CardTitle>
+            <button
+              onClick={refreshRates}
+              disabled={ratesFetching}
+              title="重新整理匯率"
+              className="text-[hsl(240_5%_64.9%)] hover:text-white transition-colors disabled:opacity-40"
+            >
+              <RefreshCw className={`h-4 w-4 ${ratesFetching ? 'animate-spin' : ''}`} />
+            </button>
           </CardHeader>
           <CardContent className="space-y-2">
             {foreignCurrencies.map((currency) => {

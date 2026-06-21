@@ -53,6 +53,10 @@ function getFallbackRates(base: Currency): ExchangeRates {
   return { base, rates, timestamp: Date.now() }
 }
 
+export function clearRatesCache() {
+  localStorage.removeItem(RATES_KEY)
+}
+
 export function convertCurrency(
   amount: number,
   from: Currency,

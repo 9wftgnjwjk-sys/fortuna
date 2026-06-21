@@ -1,6 +1,6 @@
 import { NavLink } from 'react-router-dom'
 import {
-  LayoutDashboard, Wallet, TrendingDown, LineChart, Settings, LogOut, BarChart3
+  LayoutDashboard, Wallet, TrendingDown, Settings, LogOut, BarChart3
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/store/auth'
@@ -9,7 +9,6 @@ const navItems = [
   { to: '/app/dashboard', icon: LayoutDashboard, label: '儀表板' },
   { to: '/app/assets', icon: Wallet, label: '資產' },
   { to: '/app/liabilities', icon: TrendingDown, label: '負債' },
-  { to: '/app/history', icon: LineChart, label: '歷史趨勢' },
   { to: '/app/settings', icon: Settings, label: '設定' },
 ]
 
