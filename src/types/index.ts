@@ -42,8 +42,27 @@ export interface Liability {
   type: LiabilityType
   currency: Currency
   balance: number
+  monthly_payment: number | null
+  payment_start_date: string | null
   created_at: string
   updated_at: string
+}
+
+export interface StockTransaction {
+  id: string
+  position_id: string
+  user_id: string
+  transaction_date: string
+  quantity: number
+  price: number
+  note: string | null
+  created_at: string
+}
+
+export interface AllocationDetail {
+  name: string
+  value: number
+  category: 'cash' | 'investment'
 }
 
 export interface NetWorthSnapshot {

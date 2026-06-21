@@ -51,6 +51,8 @@ export default function Dashboard() {
     )
   }
 
+  const pieTotal = (data?.allocation ?? []).reduce((s, a) => s + a.value, 0)
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -58,34 +60,16 @@ export default function Dashboard() {
           <h1 className="text-2xl font-bold text-white">儀表板</h1>
           <p className="text-sm text-[hsl(240_5%_64.9%)]">資產總覽</p>
         </div>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={handleSaveSnapshot}
-          disabled={createSnapshot.isPending}
-        >
+        <Button variant="outline" size="sm" onClick={handleSaveSnapshot} disabled={createSnapshot.isPending}>
           <Save className="h-4 w-4" />
           儲存快照
         </Button>
       </div>
 
       <div className="grid gap-4 md:grid-cols-3">
-        <StatCard
-          title="淨資產"
-          value={formatCurrency(data?.netWorth ?? 0, baseCurrency)}
-          icon={DollarSign}
-        />
-        <StatCard
-          title="總資產"
-          value={formatCurrency(data?.totalAssets ?? 0, baseCurrency)}
-          icon={TrendingUp}
-        />
-        <StatCard
-          title="總負債"
-          value={formatCurrency(data?.totalLiabilities ?? 0, baseCurrency)}
-          icon={TrendingDown}
-          positive={false}
-        />
+        <StatCard title="淨資產" value={formatCurrency(data?.netWorth ?? 0, baseCurrency)} icon={DollarSign} />
+        <StatCard title="總資產" value={formatCurrency(data?.totalAssets ?? 0, baseCurrency)} icon={TrendingUp} />
+        <StatCard title="總負債" value={formatCurrency(data?.totalLiabilities ?? 0, baseCurrency)} icon={TrendingDown} positive={false} />
       </div>
 
       {data && data.allocation.length > 0 && (
@@ -94,16 +78,18 @@ export default function Dashboard() {
             <CardTitle>資產配置</CardTitle>
           </CardHeader>
           <CardContent>
-            <ResponsiveContainer width="100%" height={300}>
+            <ResponsiveContainer width="100%" height={280}>
               <PieChart>
                 <Pie
                   data={data.allocation}
                   cx="50%"
                   cy="50%"
-                  innerRadius={70}
-                  outerRadius={120}
+                  innerRadius={65}
+                  outerRadius={110}
                   paddingAngle={3}
                   dataKey="value"
+                  label={({ percent }) => (percent ?? 0) > 0.04 ? `${((percent ?? 0) * 100).toFixed(1)}%` : ''}
+                  labelLine={false}
                 >
                   {data.allocation.map((entry, index) => (
                     <Cell key={index} fill={entry.color} />
@@ -119,12 +105,70 @@ export default function Dashboard() {
                   }}
                 />
                 <Legend
-                  formatter={(value) => (
-                    <span style={{ color: 'hsl(240 5% 80%)' }}>{value}</span>
-                  )}
+                  formatter={(value, entry: any) => {
+                    const pct = pieTotal > 0 ? ((entry.payload?.value ?? 0) / pieTotal * 100).toFixed(1) : '0'
+                    return <span style={{ color: 'hsl(240 5% 80%)' }}>{value} {pct}%</span>
+                  }}
                 />
               </PieChart>
             </ResponsiveContainer>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* 資產明細 */}
+      {data && data.detail.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle>資產明細</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {data.detail.filter((d) => d.category === 'cash').length > 0 && (
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-[hsl(240_5%_64.9%)] mb-2">現金 / 銀行</p>
+                <div className="space-y-1.5">
+                  {data.detail.filter((d) => d.category === 'cash').map((d, i) => (
+                    <div key={i} className="flex items-center justify-between text-sm">
+                      <span className="text-white">{d.name}</span>
+                      <div className="flex items-center gap-4">
+                        <span className="text-[hsl(240_5%_64.9%)] w-12 text-right">
+                          {data.totalAssets > 0 ? `${(d.value / data.totalAssets * 100).toFixed(1)}%` : '—'}
+                        </span>
+                        <span className="font-semibold text-white w-32 text-right">
+                          {formatCurrency(d.value, baseCurrency)}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {data.detail.filter((d) => d.category === 'cash').length > 0 &&
+              data.detail.filter((d) => d.category === 'investment').length > 0 && (
+              <div className="border-t border-[hsl(240_3.7%_15.9%)]" />
+            )}
+
+            {data.detail.filter((d) => d.category === 'investment').length > 0 && (
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-[hsl(240_5%_64.9%)] mb-2">投資部位</p>
+                <div className="space-y-1.5">
+                  {data.detail.filter((d) => d.category === 'investment').map((d, i) => (
+                    <div key={i} className="flex items-center justify-between text-sm">
+                      <span className="text-white">{d.name}</span>
+                      <div className="flex items-center gap-4">
+                        <span className="text-[hsl(240_5%_64.9%)] w-12 text-right">
+                          {data.totalAssets > 0 ? `${(d.value / data.totalAssets * 100).toFixed(1)}%` : '—'}
+                        </span>
+                        <span className="font-semibold text-white w-32 text-right">
+                          {formatCurrency(d.value, baseCurrency)}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </CardContent>
         </Card>
       )}

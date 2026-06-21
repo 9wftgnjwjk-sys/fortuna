@@ -38,6 +38,18 @@ export function formatNumber(n: number): string {
   return n.toFixed(2)
 }
 
+export function computeLiabilityBalance(l: {
+  balance: number
+  monthly_payment: number | null
+  payment_start_date: string | null
+}): number {
+  if (!l.monthly_payment || !l.payment_start_date) return l.balance
+  const start = new Date(l.payment_start_date)
+  const now = new Date()
+  const monthsElapsed = (now.getFullYear() - start.getFullYear()) * 12 + (now.getMonth() - start.getMonth())
+  return Math.max(0, l.balance - l.monthly_payment * Math.max(0, monthsElapsed))
+}
+
 export function formatDate(dateStr: string): string {
   return new Date(dateStr).toLocaleDateString('zh-TW', {
     year: 'numeric',

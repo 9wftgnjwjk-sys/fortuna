@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useLiabilities, useCreateLiability, useUpdateLiability, useDeleteLiability } from '@/hooks/useLiabilities'
-import { formatCurrency } from '@/lib/utils'
+import { formatCurrency, computeLiabilityBalance } from '@/lib/utils'
 import type { Liability, LiabilityType, Currency } from '@/types'
 
 const liabilityTypeLabels: Record<LiabilityType, string> = {
@@ -17,8 +17,19 @@ const liabilityTypeLabels: Record<LiabilityType, string> = {
 
 const currencies: Currency[] = ['TWD', 'USD', 'JPY', 'HKD', 'EUR', 'GBP']
 
-type LiabilityForm = { name: string; type: LiabilityType; currency: Currency; balance: string }
-const defaultForm: LiabilityForm = { name: '', type: 'mortgage', currency: 'TWD', balance: '' }
+type LiabilityForm = {
+  name: string
+  type: LiabilityType
+  currency: Currency
+  balance: string
+  monthly_payment: string
+  payment_start_date: string
+}
+
+const defaultForm: LiabilityForm = {
+  name: '', type: 'mortgage', currency: 'TWD', balance: '',
+  monthly_payment: '', payment_start_date: '',
+}
 
 export default function Liabilities() {
   const { data: liabilities = [], isLoading } = useLiabilities()
@@ -35,7 +46,14 @@ export default function Liabilities() {
   }
 
   function openEdit(l: Liability) {
-    setForm({ name: l.name, type: l.type, currency: l.currency, balance: String(l.balance) })
+    setForm({
+      name: l.name,
+      type: l.type,
+      currency: l.currency,
+      balance: String(l.balance),
+      monthly_payment: l.monthly_payment != null ? String(l.monthly_payment) : '',
+      payment_start_date: l.payment_start_date ?? '',
+    })
     setDialog({ open: true, editing: l })
   }
 
@@ -45,6 +63,8 @@ export default function Liabilities() {
       type: form.type,
       currency: form.currency,
       balance: parseFloat(form.balance) || 0,
+      monthly_payment: form.monthly_payment ? parseFloat(form.monthly_payment) : null,
+      payment_start_date: form.payment_start_date || null,
     }
     if (dialog.editing) {
       await updateLiability.mutateAsync({ id: dialog.editing.id, ...payload })
@@ -55,7 +75,7 @@ export default function Liabilities() {
   }
 
   const totalTWD = liabilities.reduce((sum, l) => {
-    if (l.currency === 'TWD') return sum + l.balance
+    if (l.currency === 'TWD') return sum + computeLiabilityBalance(l)
     return sum
   }, 0)
 
@@ -77,19 +97,34 @@ export default function Liabilities() {
             ? <p className="text-center text-sm text-[hsl(240_5%_64.9%)] py-8">尚無負債紀錄</p>
             : (
               <div className="space-y-2">
-                {liabilities.map((l) => (
-                  <div key={l.id} className="flex items-center justify-between rounded-lg bg-[hsl(240_3.7%_8%)] px-4 py-3">
-                    <div className="flex items-center gap-3">
-                      <Badge variant="destructive">{liabilityTypeLabels[l.type]}</Badge>
-                      <span className="text-white">{l.name}</span>
+                {liabilities.map((l) => {
+                  const remaining = computeLiabilityBalance(l)
+                  const hasAutoCalc = l.monthly_payment != null && l.payment_start_date != null
+                  return (
+                    <div key={l.id} className="rounded-lg bg-[hsl(240_3.7%_8%)] px-4 py-3 space-y-1">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <Badge variant="destructive">{liabilityTypeLabels[l.type]}</Badge>
+                          <span className="text-white">{l.name}</span>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <span className="font-semibold text-red-400">{formatCurrency(remaining, l.currency)}</span>
+                          <button onClick={() => openEdit(l)} className="text-[hsl(240_5%_64.9%)] hover:text-white"><Pencil className="h-4 w-4" /></button>
+                          <button onClick={() => deleteLiability.mutate(l.id)} className="text-[hsl(240_5%_64.9%)] hover:text-red-400"><Trash2 className="h-4 w-4" /></button>
+                        </div>
+                      </div>
+                      {hasAutoCalc && (
+                        <div className="flex items-center gap-3 text-xs text-[hsl(240_5%_64.9%)]">
+                          <span>原始金額 {formatCurrency(l.balance, l.currency)}</span>
+                          <span>·</span>
+                          <span>每月 -{formatCurrency(l.monthly_payment!, l.currency)}</span>
+                          <span>·</span>
+                          <span>自 {l.payment_start_date} 起</span>
+                        </div>
+                      )}
                     </div>
-                    <div className="flex items-center gap-3">
-                      <span className="font-semibold text-red-400">{formatCurrency(l.balance, l.currency)}</span>
-                      <button onClick={() => openEdit(l)} className="text-[hsl(240_5%_64.9%)] hover:text-white"><Pencil className="h-4 w-4" /></button>
-                      <button onClick={() => deleteLiability.mutate(l.id)} className="text-[hsl(240_5%_64.9%)] hover:text-red-400"><Trash2 className="h-4 w-4" /></button>
-                    </div>
-                  </div>
-                ))}
+                  )
+                })}
                 <div className="flex justify-between border-t border-[hsl(240_3.7%_15.9%)] pt-3 mt-3">
                   <span className="text-[hsl(240_5%_64.9%)]">台幣合計（不含換算）</span>
                   <span className="font-bold text-red-400">{formatCurrency(totalTWD, 'TWD')}</span>
@@ -128,8 +163,18 @@ export default function Liabilities() {
                 </Select>
               </div>
               <div className="space-y-2">
-                <Label>剩餘金額</Label>
+                <Label>原始貸款金額</Label>
                 <Input type="number" value={form.balance} onChange={(e) => setForm({ ...form, balance: e.target.value })} placeholder="0" />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>每月還款金額（選填）</Label>
+                <Input type="number" value={form.monthly_payment} onChange={(e) => setForm({ ...form, monthly_payment: e.target.value })} placeholder="0" />
+              </div>
+              <div className="space-y-2">
+                <Label>開始還款日期（選填）</Label>
+                <Input type="month" value={form.payment_start_date} onChange={(e) => setForm({ ...form, payment_start_date: e.target.value })} />
               </div>
             </div>
           </div>

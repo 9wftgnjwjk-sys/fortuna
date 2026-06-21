@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react'
-import { Plus, Pencil, Trash2, Loader2 } from 'lucide-react'
+import { Plus, Pencil, Trash2, Loader2, History, X } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useAccounts, useCreateAccount, useUpdateAccount, useDeleteAccount } from '@/hooks/useAccounts'
 import { usePositions, useCreatePosition, useUpdatePosition, useDeletePosition } from '@/hooks/usePositions'
 import { usePrices } from '@/hooks/usePrices'
+import { useStockTransactions, useCreateStockTransaction, useDeleteStockTransaction } from '@/hooks/useStockTransactions'
 import { fetchQuote } from '@/lib/quotes'
 import { formatCurrency } from '@/lib/utils'
 import type { Account, Position, AccountType, PositionType, Currency } from '@/types'
@@ -26,9 +27,130 @@ const currencies: Currency[] = ['TWD', 'USD', 'JPY', 'HKD', 'EUR', 'GBP', 'BTC',
 
 type AccountForm = { name: string; type: AccountType; currency: Currency; balance: string }
 type PositionForm = { name: string; symbol: string; type: PositionType; quantity: string; currency: Currency; cost_price: string }
+type TxForm = { transaction_date: string; quantity: string; price: string; note: string }
 
 const defaultAccountForm: AccountForm = { name: '', type: 'bank', currency: 'TWD', balance: '' }
 const defaultPositionForm: PositionForm = { name: '', symbol: '', type: 'tw_stock', quantity: '', currency: 'TWD', cost_price: '' }
+const defaultTxForm: TxForm = { transaction_date: new Date().toISOString().split('T')[0], quantity: '', price: '', note: '' }
+
+function TransactionDialog({ position, onClose }: { position: Position; onClose: () => void }) {
+  const currentPriceFromHook = usePrices([position.symbol])
+  const currentPrice = currentPriceFromHook.data?.[position.symbol]?.price ?? null
+  const { data: transactions = [], isLoading } = useStockTransactions(position.id)
+  const createTx = useCreateStockTransaction()
+  const deleteTx = useDeleteStockTransaction()
+  const [txForm, setTxForm] = useState<TxForm>(defaultTxForm)
+
+  const totalShares = transactions.reduce((s, t) => s + t.quantity, 0)
+  const totalCost = transactions.reduce((s, t) => s + t.quantity * t.price, 0)
+  const avgCost = totalShares > 0 ? totalCost / totalShares : null
+
+  const returnRate = avgCost != null && currentPrice != null
+    ? (currentPrice - avgCost) / avgCost * 100
+    : null
+
+  async function handleAddTx() {
+    if (!txForm.quantity || !txForm.price) return
+    await createTx.mutateAsync({
+      position_id: position.id,
+      transaction_date: txForm.transaction_date,
+      quantity: parseFloat(txForm.quantity),
+      price: parseFloat(txForm.price),
+      note: txForm.note || null,
+    })
+    setTxForm(defaultTxForm)
+  }
+
+  return (
+    <Dialog open onOpenChange={(open) => { if (!open) onClose() }}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle>
+            {position.symbol}{position.name ? ` · ${position.name}` : ''} — 買入記錄
+          </DialogTitle>
+        </DialogHeader>
+
+        {/* 摘要 */}
+        <div className="grid grid-cols-2 gap-3 text-sm">
+          <div className="rounded-lg bg-[hsl(240_3.7%_8%)] px-3 py-2">
+            <p className="text-[hsl(240_5%_64.9%)]">總持股</p>
+            <p className="font-semibold text-white">{totalShares.toLocaleString()} 股</p>
+          </div>
+          <div className="rounded-lg bg-[hsl(240_3.7%_8%)] px-3 py-2">
+            <p className="text-[hsl(240_5%_64.9%)]">加權均價</p>
+            <p className="font-semibold text-white">
+              {avgCost != null ? formatCurrency(avgCost, position.currency) : '—'}
+            </p>
+          </div>
+          <div className="rounded-lg bg-[hsl(240_3.7%_8%)] px-3 py-2">
+            <p className="text-[hsl(240_5%_64.9%)]">現價</p>
+            <p className="font-semibold text-white">
+              {currentPrice != null ? formatCurrency(currentPrice, position.currency) : '—'}
+            </p>
+          </div>
+          <div className="rounded-lg bg-[hsl(240_3.7%_8%)] px-3 py-2">
+            <p className="text-[hsl(240_5%_64.9%)]">報酬率</p>
+            <p className={`font-semibold ${returnRate == null ? 'text-white' : returnRate >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+              {returnRate != null ? `${returnRate >= 0 ? '+' : ''}${returnRate.toFixed(2)}%` : '—'}
+            </p>
+          </div>
+        </div>
+
+        {/* 交易清單 */}
+        <div className="max-h-48 overflow-y-auto space-y-1.5">
+          {isLoading
+            ? <div className="flex justify-center py-4"><Loader2 className="h-5 w-5 animate-spin text-[hsl(240_5%_64.9%)]" /></div>
+            : transactions.length === 0
+              ? <p className="text-center text-sm text-[hsl(240_5%_64.9%)] py-4">尚無記錄</p>
+              : transactions.map((t) => (
+                <div key={t.id} className="flex items-center justify-between rounded-md bg-[hsl(240_3.7%_8%)] px-3 py-2 text-sm">
+                  <div className="flex items-center gap-3">
+                    <span className="text-[hsl(240_5%_64.9%)]">{t.transaction_date}</span>
+                    <span className="text-white">{t.quantity} 股</span>
+                    <span className="text-[hsl(240_5%_64.9%)]">@ {formatCurrency(t.price, position.currency)}</span>
+                  </div>
+                  <button
+                    onClick={() => deleteTx.mutate({ id: t.id, positionId: position.id })}
+                    className="text-[hsl(240_5%_64.9%)] hover:text-red-400"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              ))
+          }
+        </div>
+
+        {/* 新增表單 */}
+        <div className="border-t border-[hsl(240_3.7%_15.9%)] pt-4 space-y-3">
+          <p className="text-xs font-semibold uppercase tracking-wide text-[hsl(240_5%_64.9%)]">新增一筆</p>
+          <div className="grid grid-cols-3 gap-2">
+            <div className="space-y-1">
+              <Label className="text-xs">日期</Label>
+              <Input type="date" value={txForm.transaction_date} onChange={(e) => setTxForm({ ...txForm, transaction_date: e.target.value })} />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">股數</Label>
+              <Input type="number" placeholder="1000" value={txForm.quantity} onChange={(e) => setTxForm({ ...txForm, quantity: e.target.value })} />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">成交價</Label>
+              <Input type="number" placeholder="100" value={txForm.price} onChange={(e) => setTxForm({ ...txForm, price: e.target.value })} />
+            </div>
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs">備註（選填）</Label>
+            <Input placeholder="第一次買入" value={txForm.note} onChange={(e) => setTxForm({ ...txForm, note: e.target.value })} />
+          </div>
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>關閉</Button>
+          <Button onClick={handleAddTx} disabled={createTx.isPending || !txForm.quantity || !txForm.price}>新增</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
 
 export default function Assets() {
   const { data: accounts = [], isLoading: loadingAccounts } = useAccounts()
@@ -49,6 +171,7 @@ export default function Assets() {
   const [positionForm, setPositionForm] = useState<PositionForm>(defaultPositionForm)
   const [symbolLooking, setSymbolLooking] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
+  const [txPosition, setTxPosition] = useState<Position | null>(null)
 
   function openNewAccount() {
     setAccountForm(defaultAccountForm)
@@ -188,6 +311,7 @@ export default function Assets() {
                           {p.name && <span className="text-white">{p.name}</span>}
                         </div>
                         <div className="flex items-center gap-2">
+                          <button onClick={() => setTxPosition(p)} className="text-[hsl(240_5%_64.9%)] hover:text-white" title="買入記錄"><History className="h-4 w-4" /></button>
                           <button onClick={() => openEditPosition(p)} className="text-[hsl(240_5%_64.9%)] hover:text-white"><Pencil className="h-4 w-4" /></button>
                           <button onClick={() => deletePosition.mutate(p.id)} className="text-[hsl(240_5%_64.9%)] hover:text-red-400"><Trash2 className="h-4 w-4" /></button>
                         </div>
@@ -311,6 +435,9 @@ export default function Assets() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* 買入記錄 Dialog */}
+      {txPosition && <TransactionDialog position={txPosition} onClose={() => setTxPosition(null)} />}
     </div>
   )
 }
