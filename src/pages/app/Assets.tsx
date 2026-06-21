@@ -14,6 +14,8 @@ import { useStockTransactions, useCreateStockTransaction, useImportStockTransact
 import { fetchQuote } from '@/lib/quotes'
 import { formatCurrency, extractErrorMessage } from '@/lib/utils'
 import { parseCathayCSV } from '@/lib/csv'
+import { fetchRecentSplits } from '@/lib/splits'
+import type { SplitEvent } from '@/lib/splits'
 import type { Account, Position, AccountType, PositionType, Currency, StockTransaction } from '@/types'
 
 const accountTypeLabels: Record<AccountType, string> = {
@@ -50,6 +52,23 @@ function TransactionDialog({ position, onClose }: { position: Position; onClose:
   const [splitDate, setSplitDate] = useState('')
   const [splitRatio, setSplitRatio] = useState('')
   const [splitDone, setSplitDone] = useState<number | null>(null)
+  const [recentSplits, setRecentSplits] = useState<SplitEvent[]>([])
+  const [splitsLoading, setSplitsLoading] = useState(false)
+  const [splitsQueried, setSplitsQueried] = useState(false)
+
+  async function handleQuerySplits() {
+    setSplitsLoading(true)
+    setSplitsQueried(false)
+    const splits = await fetchRecentSplits(position.symbol, position.type)
+    setRecentSplits(splits)
+    setSplitsLoading(false)
+    setSplitsQueried(true)
+    if (splits.length === 1) {
+      setSplitDate(splits[0].date)
+      setSplitRatio(String(splits[0].ratio))
+      setSplitDone(null)
+    }
+  }
 
   const totalShares = transactions.reduce((s, t) => s + t.quantity, 0)
   const totalCost = transactions.reduce((s, t) => s + t.quantity * t.price, 0)
@@ -194,8 +213,40 @@ function TransactionDialog({ position, onClose }: { position: Position; onClose:
 
         {/* 股票分割回溯調整 */}
         <div className="border-t border-[hsl(240_3.7%_15.9%)] pt-4 space-y-3">
-          <p className="text-xs font-semibold uppercase tracking-wide text-[hsl(240_5%_64.9%)]">股票分割調整</p>
+          <div className="flex items-center justify-between">
+            <p className="text-xs font-semibold uppercase tracking-wide text-[hsl(240_5%_64.9%)]">股票分割調整</p>
+            <button
+              onClick={handleQuerySplits}
+              disabled={splitsLoading}
+              className="flex items-center gap-1 text-xs text-[hsl(142.1_76.2%_56%)] hover:text-[hsl(142.1_76.2%_46%)] disabled:opacity-50"
+            >
+              {splitsLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : null}
+              自動查詢分割記錄
+            </button>
+          </div>
           <p className="text-xs text-[hsl(240_5%_50%)]">將分割日前的舊紀錄回溯調整：股數 × 比例，價格 ÷ 比例</p>
+
+          {/* 查詢到的分割記錄 */}
+          {splitsQueried && recentSplits.length > 0 && (
+            <div className="space-y-1.5">
+              <p className="text-xs text-[hsl(240_5%_64.9%)]">查詢到以下分割記錄（點選套用）：</p>
+              <div className="flex flex-wrap gap-2">
+                {recentSplits.map((s) => (
+                  <button
+                    key={s.date}
+                    onClick={() => { setSplitDate(s.date); setSplitRatio(String(s.ratio)); setSplitDone(null) }}
+                    className="rounded-md border border-[hsl(142.1_76.2%_36.3%)] bg-[hsl(142.1_76.2%_36.3%/0.15)] px-2.5 py-1 text-xs text-[hsl(142.1_76.2%_56%)] hover:bg-[hsl(142.1_76.2%_36.3%/0.3)] transition-colors"
+                  >
+                    {s.date} &nbsp;1 → {s.ratio}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+          {splitsQueried && recentSplits.length === 0 && (
+            <p className="text-xs text-amber-400">未查詢到分割記錄，請手動輸入</p>
+          )}
+
           <div className="grid grid-cols-3 gap-2 items-end">
             <div className="space-y-1">
               <Label className="text-xs">分割日期</Label>
