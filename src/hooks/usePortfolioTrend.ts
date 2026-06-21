@@ -3,7 +3,7 @@ import { usePositions } from './usePositions'
 import { useAccounts } from './useAccounts'
 import { usePrices } from './usePrices'
 import { useSettingsStore } from '@/store/settings'
-import { fetchTWSEPriceHistory } from '@/lib/twse'
+import { fetchTWSESymbolData, effectiveQuantity } from '@/lib/twse'
 import { fetchExchangeRates, convertCurrency } from '@/lib/currency'
 import type { Currency } from '@/types'
 
@@ -46,14 +46,15 @@ export function usePortfolioTrend(monthsBack = 13) {
         return sum + convertCurrency(dbPrice.price * p.quantity, dbPrice.currency as Currency, baseCurrency, rates)
       }, 0)
 
-      // ── Fetch daily price history for each tw_stock ────────────────────────
-      const priceHistories = await Promise.all(
-        twPositions.map((p) => fetchTWSEPriceHistory(p.symbol, monthsBack))
+      // ── Fetch daily price history + split events for each tw_stock ─────────
+      // fetchTWSESymbolData detects splits from the same price data — no extra API calls.
+      const symbolDataList = await Promise.all(
+        twPositions.map((p) => fetchTWSESymbolData(p.symbol, monthsBack))
       )
 
       // Collect all trading dates across all symbols
       const allDates = new Set<string>()
-      priceHistories.forEach((h) => h.forEach((_, date) => allDates.add(date)))
+      symbolDataList.forEach(({ prices }) => prices.forEach((_, date) => allDates.add(date)))
 
       if (allDates.size === 0) return [] as TrendPoint[]
 
@@ -69,10 +70,14 @@ export function usePortfolioTrend(monthsBack = 13) {
 
         for (let i = 0; i < twPositions.length; i++) {
           const p = twPositions[i]
-          const dayPrice = priceHistories[i].get(date)
+          const { prices, splits } = symbolDataList[i]
+          const dayPrice = prices.get(date)
           if (dayPrice !== undefined) lastKnown.set(p.symbol, dayPrice)
           const price = lastKnown.get(p.symbol) ?? 0
-          dayInvestments += convertCurrency(price * p.quantity, p.currency as Currency, baseCurrency, rates)
+
+          // Use pre-split quantity for dates before any split occurred.
+          const qty = effectiveQuantity(p.quantity, splits, date)
+          dayInvestments += convertCurrency(price * qty, p.currency as Currency, baseCurrency, rates)
         }
 
         points.push({

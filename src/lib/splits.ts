@@ -1,5 +1,5 @@
 import type { PositionType } from '@/types'
-import { fetchTWSEMonth } from './twse'
+import { fetchTWSEMonth, detectSplitsFromDays } from './twse'
 
 export interface SplitEvent {
   date: string   // YYYY-MM-DD (first trading day after split, i.e. ex-date)
@@ -22,20 +22,7 @@ async function detectSplitsFromTWSE(symbol: string, monthsBack = 24): Promise<Sp
   try {
     const monthlyArrays = await Promise.all(monthKeys.map((ym) => fetchTWSEMonth(symbol, ym)))
     const allDays = monthlyArrays.flat().sort((a, b) => a.date.localeCompare(b.date))
-
-    const splits: SplitEvent[] = []
-    for (let i = 1; i < allDays.length; i++) {
-      const prevClose = allDays[i - 1].close
-      const refPrice = allDays[i].close - allDays[i].priceChange
-      if (refPrice <= 0 || isNaN(refPrice)) continue
-      const ratio = prevClose / refPrice
-      const rounded = Math.round(ratio)
-      if (rounded >= 2 && Math.abs(ratio - rounded) / rounded < 0.02) {
-        splits.push({ date: allDays[i].date, ratio: rounded })
-      }
-    }
-
-    return splits.sort((a, b) => b.date.localeCompare(a.date))
+    return detectSplitsFromDays(allDays)
   } catch {
     return null
   }
