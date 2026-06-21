@@ -56,17 +56,19 @@ export function usePortfolioTrend(monthsBack = 13) {
       }, 0)
 
       // ── Fetch transactions first to determine the required date range ────────
-      const txResult = await (twPositions.length > 0
-        ? supabase
-            .from('stock_transactions')
-            .select('position_id, transaction_date, quantity')
-            .in('position_id', twPositions.map((p) => p.id))
-            .order('transaction_date', { ascending: true })
-        : Promise.resolve({ data: [] }))
+      type TxRow = { position_id: string; transaction_date: string; quantity: number }
+      let txRows: TxRow[] = []
+      if (twPositions.length > 0) {
+        const { data } = await supabase
+          .from('stock_transactions')
+          .select('position_id, transaction_date, quantity')
+          .in('position_id', twPositions.map((p) => p.id))
+          .order('transaction_date', { ascending: true })
+        txRows = (data ?? []) as TxRow[]
+      }
 
       // Calculate months needed to cover the earliest transaction date
-      const allTxDates = (txResult.data ?? []).map((tx: { transaction_date: string }) => tx.transaction_date)
-      const earliestTx = allTxDates[0] ?? null
+      const earliestTx = txRows[0]?.transaction_date ?? null
       const dynamicMonthsBack = earliestTx
         ? Math.ceil((Date.now() - new Date(earliestTx).getTime()) / (1000 * 60 * 60 * 24 * 30)) + 1
         : monthsBack
@@ -78,7 +80,7 @@ export function usePortfolioTrend(monthsBack = 13) {
 
       // Group transactions by position for fast lookup
       const txsByPosition = new Map<string, Array<{ date: string; quantity: number }>>()
-      for (const tx of txResult.data ?? []) {
+      for (const tx of txRows) {
         if (!txsByPosition.has(tx.position_id)) txsByPosition.set(tx.position_id, [])
         txsByPosition.get(tx.position_id)!.push({ date: tx.transaction_date, quantity: tx.quantity })
       }
