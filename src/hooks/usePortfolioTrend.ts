@@ -100,8 +100,11 @@ export function usePortfolioTrend(monthsBack = 13) {
           const dayPrice = prices.get(date)
           if (dayPrice !== undefined) lastKnown.set(p.symbol, dayPrice)
           const price = lastKnown.get(p.symbol) ?? 0
-          // Use transaction history when available; fall back to current qty + split adjustment
-          const qty = qtyFromTxs(p.id, date) ?? effectiveQuantity(p.quantity, splits, date)
+          // Use transaction history when available, fall back to current qty.
+          // Always apply effectiveQuantity: transactions are stored in post-split terms
+          // (via useApplyStockSplit), so we must divide out splits that hadn't happened yet.
+          const rawQty = qtyFromTxs(p.id, date) ?? p.quantity
+          const qty = effectiveQuantity(rawQty, splits, date)
           dayInvestments += convertCurrency(price * qty, p.currency as Currency, baseCurrency, rates)
         }
 
