@@ -179,29 +179,33 @@ export default function Assets() {
                     ? (currentPrice - p.cost_price) / p.cost_price * 100
                     : null
                   return (
-                    <div key={p.id} className="flex items-center justify-between rounded-lg bg-[hsl(240_3.7%_8%)] px-4 py-3">
-                      <div className="flex items-center gap-3">
-                        <Badge variant="secondary">{positionTypeLabels[p.type]}</Badge>
-                        <div>
+                    <div key={p.id} className="rounded-lg bg-[hsl(240_3.7%_8%)] px-4 py-3 space-y-1.5">
+                      {/* 第一行：標籤 + 名稱 + 按鈕 */}
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <Badge variant="secondary">{positionTypeLabels[p.type]}</Badge>
                           <span className="font-mono text-sm text-[hsl(142.1_76.2%_56%)]">{p.symbol}</span>
-                          <span className="ml-2 text-white">{p.name}</span>
+                          {p.name && <span className="text-white">{p.name}</span>}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <button onClick={() => openEditPosition(p)} className="text-[hsl(240_5%_64.9%)] hover:text-white"><Pencil className="h-4 w-4" /></button>
+                          <button onClick={() => deletePosition.mutate(p.id)} className="text-[hsl(240_5%_64.9%)] hover:text-red-400"><Trash2 className="h-4 w-4" /></button>
                         </div>
                       </div>
-                      <div className="flex items-center gap-3">
-                        <span className="text-sm text-[hsl(240_5%_64.9%)]">× {p.quantity}</span>
+                      {/* 第二行：持倉數字 */}
+                      <div className="flex items-center gap-4 text-sm">
+                        <span className="text-[hsl(240_5%_64.9%)]">× {p.quantity}</span>
                         {currentPrice != null && (
-                          <span className="text-sm text-white">現價 {formatCurrency(currentPrice, p.currency)}</span>
+                          <span className="text-white">現價 {formatCurrency(currentPrice, p.currency)}</span>
                         )}
                         {p.cost_price != null && (
-                          <span className="text-xs text-[hsl(240_5%_64.9%)]">均價 {formatCurrency(p.cost_price, p.currency)}</span>
+                          <span className="text-[hsl(240_5%_64.9%)]">均價 {formatCurrency(p.cost_price, p.currency)}</span>
                         )}
                         {returnRate != null && (
-                          <span className={`text-sm font-semibold ${returnRate >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                          <span className={`font-semibold ${returnRate >= 0 ? 'text-green-400' : 'text-red-400'}`}>
                             {returnRate >= 0 ? '+' : ''}{returnRate.toFixed(2)}%
                           </span>
                         )}
-                        <button onClick={() => openEditPosition(p)} className="text-[hsl(240_5%_64.9%)] hover:text-white"><Pencil className="h-4 w-4" /></button>
-                        <button onClick={() => deletePosition.mutate(p.id)} className="text-[hsl(240_5%_64.9%)] hover:text-red-400"><Trash2 className="h-4 w-4" /></button>
                       </div>
                     </div>
                   )

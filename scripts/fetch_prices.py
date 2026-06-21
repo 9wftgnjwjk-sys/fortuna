@@ -38,11 +38,16 @@ _SESSION.headers.update({"User-Agent": "Mozilla/5.0"})
 
 def parse_tw_name_from_title(symbol: str, title: str) -> str | None:
     """從 TWSE title 欄位解析中文股票名稱。
-    title 格式範例: '113年12月 2330 台積電           每日收盤行情'
+    title 格式範例:
+      '115年06月 0050 元大台灣50       各日成交資訊'
+      '113年12月 2330 台積電           每日收盤行情'
+    取代號之後、最後一個詞之前的內容。
     """
-    match = re.search(rf'{re.escape(symbol)}\s+(.+?)\s*每日收盤行情', title)
+    match = re.search(rf'{re.escape(symbol)}\s+(.+)', title)
     if match:
-        return match.group(1).strip()
+        # 去掉末尾的標籤詞（如「各日成交資訊」「每日收盤行情」）
+        name_part = re.sub(r'\s+\S+$', '', match.group(1)).strip()
+        return name_part or None
     return None
 
 
@@ -59,9 +64,7 @@ def fetch_tw_stock_price(symbol: str) -> tuple[float, str, str | None] | None:
             return fetch_tpex_price(symbol)
         # fields: 日期、成交股數、成交金額、開盤價、最高價、最低價、收盤價、漲跌、筆數
         close_price = float(data["data"][-1][6].replace(",", ""))
-        title = data.get("title", "")
-        print(f"    DEBUG title: {repr(title)}", file=sys.stderr)
-        name = parse_tw_name_from_title(symbol, title)
+        name = parse_tw_name_from_title(symbol, data.get("title", ""))
         return close_price, "TWD", name
     except Exception as e:
         print(f"    TWSE error ({symbol}): {e}", file=sys.stderr)
