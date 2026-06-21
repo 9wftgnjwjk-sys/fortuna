@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { Plus, Pencil, Trash2, Loader2, History, X, Upload } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -49,34 +49,25 @@ function TransactionDialog({ position, onClose }: { position: Position; onClose:
   const [txError, setTxError] = useState<string | null>(null)
   const [importPreview, setImportPreview] = useState<Array<{ date: string; qty: number; price: number }> | null>(null)
   const [pendingRows, setPendingRows] = useState<Array<Omit<StockTransaction, 'id' | 'user_id' | 'created_at'>> | null>(null)
-  const [splitDate, setSplitDate] = useState('')
-  const [splitRatio, setSplitRatio] = useState('')
   const [splitDone, setSplitDone] = useState<number | null>(null)
   const [recentSplits, setRecentSplits] = useState<SplitEvent[]>([])
   const [splitsLoading, setSplitsLoading] = useState(false)
   const [splitsStatus, setSplitsStatus] = useState<'idle' | 'ok' | 'empty' | 'error'>('idle')
 
-  async function handleQuerySplits() {
+  useEffect(() => {
     setSplitsLoading(true)
-    setSplitsStatus('idle')
-    const splits = await fetchRecentSplits(position.symbol, position.type)
-    setSplitsLoading(false)
-    if (splits === null) {
-      setSplitsStatus('error')
-      setRecentSplits([])
-    } else if (splits.length === 0) {
-      setSplitsStatus('empty')
-      setRecentSplits([])
-    } else {
-      setSplitsStatus('ok')
-      setRecentSplits(splits)
-      if (splits.length === 1) {
-        setSplitDate(splits[0].date)
-        setSplitRatio(String(splits[0].ratio))
-        setSplitDone(null)
+    fetchRecentSplits(position.symbol, position.type).then((splits) => {
+      setSplitsLoading(false)
+      if (splits === null) {
+        setSplitsStatus('error')
+      } else if (splits.length === 0) {
+        setSplitsStatus('empty')
+      } else {
+        setSplitsStatus('ok')
+        setRecentSplits(splits)
       }
-    }
-  }
+    })
+  }, [position.symbol, position.type])
 
   const totalShares = transactions.reduce((s, t) => s + t.quantity, 0)
   const totalCost = transactions.reduce((s, t) => s + t.quantity * t.price, 0)
@@ -220,75 +211,46 @@ function TransactionDialog({ position, onClose }: { position: Position; onClose:
         {txError && <p className="text-sm text-red-400">{txError}</p>}
 
         {/* 股票分割回溯調整 */}
-        <div className="border-t border-[hsl(240_3.7%_15.9%)] pt-4 space-y-3">
-          <div className="flex items-center justify-between">
+        <div className="border-t border-[hsl(240_3.7%_15.9%)] pt-4 space-y-2">
+          <div className="flex items-center gap-2">
             <p className="text-xs font-semibold uppercase tracking-wide text-[hsl(240_5%_64.9%)]">股票分割調整</p>
-            <button
-              onClick={handleQuerySplits}
-              disabled={splitsLoading}
-              className="flex items-center gap-1 text-xs text-[hsl(142.1_76.2%_56%)] hover:text-[hsl(142.1_76.2%_46%)] disabled:opacity-50"
-            >
-              {splitsLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : null}
-              自動查詢分割記錄
-            </button>
+            {splitsLoading && <Loader2 className="h-3 w-3 animate-spin text-[hsl(240_5%_64.9%)]" />}
           </div>
-          <p className="text-xs text-[hsl(240_5%_50%)]">將分割日前的舊紀錄回溯調整：股數 × 比例，價格 ÷ 比例</p>
-
-          {/* 查詢到的分割記錄 */}
           {splitsStatus === 'ok' && (
-            <div className="space-y-1.5">
-              <p className="text-xs text-[hsl(240_5%_64.9%)]">查詢到以下分割記錄（點選套用）：</p>
-              <div className="flex flex-wrap gap-2">
-                {recentSplits.map((s) => (
-                  <button
-                    key={s.date}
-                    onClick={() => { setSplitDate(s.date); setSplitRatio(String(s.ratio)); setSplitDone(null) }}
-                    className="rounded-md border border-[hsl(142.1_76.2%_36.3%)] bg-[hsl(142.1_76.2%_36.3%/0.15)] px-2.5 py-1 text-xs text-[hsl(142.1_76.2%_56%)] hover:bg-[hsl(142.1_76.2%_36.3%/0.3)] transition-colors"
-                  >
-                    {s.date} &nbsp;1 → {s.ratio}
-                  </button>
-                ))}
-              </div>
+            <div className="flex flex-wrap gap-2">
+              {recentSplits.map((s) => (
+                <button
+                  key={s.date}
+                  disabled={applySplit.isPending}
+                  onClick={async () => {
+                    setTxError(null)
+                    setSplitDone(null)
+                    try {
+                      const count = await applySplit.mutateAsync({
+                        positionId: position.id,
+                        splitDate: s.date,
+                        ratio: s.ratio,
+                      })
+                      setSplitDone(count)
+                    } catch (err) {
+                      setTxError(extractErrorMessage(err) || '調整失敗')
+                    }
+                  }}
+                  className="rounded-md border border-[hsl(142.1_76.2%_36.3%)] bg-[hsl(142.1_76.2%_36.3%/0.15)] px-2.5 py-1 text-xs text-[hsl(142.1_76.2%_56%)] hover:bg-[hsl(142.1_76.2%_36.3%/0.3)] disabled:opacity-50 transition-colors"
+                >
+                  {applySplit.isPending
+                    ? <Loader2 className="inline h-3 w-3 animate-spin" />
+                    : `${s.date}  1 → ${s.ratio}`}
+                </button>
+              ))}
             </div>
           )}
           {splitsStatus === 'empty' && (
-            <p className="text-xs text-amber-400">Yahoo Finance 查無此股票的分割記錄，請手動輸入</p>
+            <p className="text-xs text-[hsl(240_5%_50%)]">查無分割記錄</p>
           )}
           {splitsStatus === 'error' && (
-            <p className="text-xs text-red-400">查詢失敗（可能為網路或 CORS 問題），請手動輸入</p>
+            <p className="text-xs text-[hsl(240_5%_50%)]">分割記錄查詢失敗</p>
           )}
-
-          <div className="grid grid-cols-3 gap-2 items-end">
-            <div className="space-y-1">
-              <Label className="text-xs">分割日期</Label>
-              <Input type="date" value={splitDate} onChange={(e) => { setSplitDate(e.target.value); setSplitDone(null) }} />
-            </div>
-            <div className="space-y-1">
-              <Label className="text-xs">分割比例（1股變幾股）</Label>
-              <Input type="number" min="2" placeholder="例：22" value={splitRatio} onChange={(e) => { setSplitRatio(e.target.value); setSplitDone(null) }} />
-            </div>
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={!splitDate || !splitRatio || applySplit.isPending}
-              onClick={async () => {
-                setTxError(null)
-                setSplitDone(null)
-                try {
-                  const count = await applySplit.mutateAsync({
-                    positionId: position.id,
-                    splitDate,
-                    ratio: parseFloat(splitRatio),
-                  })
-                  setSplitDone(count)
-                } catch (err) {
-                  setTxError(extractErrorMessage(err) || '調整失敗')
-                }
-              }}
-            >
-              {applySplit.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : '套用'}
-            </Button>
-          </div>
           {splitDone !== null && (
             <p className="text-xs text-green-400">已調整 {splitDone} 筆分割前紀錄</p>
           )}
