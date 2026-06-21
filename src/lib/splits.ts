@@ -1,4 +1,5 @@
 import type { PositionType } from '@/types'
+import { fetchTWSEMonth } from './twse'
 
 export interface SplitEvent {
   date: string   // YYYY-MM-DD (first trading day after split, i.e. ex-date)
@@ -6,43 +7,9 @@ export interface SplitEvent {
 }
 
 // ── TWSE afterTrading/STOCK_DAY ──────────────────────────────────────────────
-// CORS: * — works directly from browser.
-// Strategy: fetch last N months of daily closing prices, detect large price
-// drops between consecutive trading days (ratio ≥ 1.5 and within 10% of an
-// integer ≥ 2). This reliably catches stock splits while ignoring dividends
-// (which produce much smaller drops).
-
-function parseROCDate(rocDate: string): string {
-  // "115/06/10" → "2026-06-10"
-  const [y, m, d] = rocDate.split('/')
-  return `${parseInt(y) + 1911}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`
-}
-
-interface DayPrice {
-  date: string
-  close: number
-  priceChange: number  // 漲跌價差；close - priceChange = 除權參考價
-}
-
-async function fetchTWSEMonth(symbol: string, yyyymm: string): Promise<DayPrice[]> {
-  try {
-    const res = await fetch(
-      `https://www.twse.com.tw/rwd/zh/afterTrading/STOCK_DAY?stockNo=${symbol}&date=${yyyymm}01&response=json`
-    )
-    if (!res.ok) return []
-    const json = await res.json()
-    if (json.stat !== 'OK' || !Array.isArray(json.data)) return []
-    return json.data
-      .map((row: string[]) => ({
-        date: parseROCDate(row[0]),
-        close: parseFloat(row[6].replace(/,/g, '')),
-        priceChange: parseFloat(row[7].replace(/,/g, '')),
-      }))
-      .filter((d: DayPrice) => !isNaN(d.close) && d.close > 0)
-  } catch {
-    return []
-  }
-}
+// Strategy: detect large price drops between consecutive trading days.
+// Use 除權參考價 = close - priceChange to remove market movement on split day,
+// leaving the pure ex-split reference price set by TWSE.
 
 async function detectSplitsFromTWSE(symbol: string, monthsBack = 24): Promise<SplitEvent[] | null> {
   const now = new Date()
@@ -59,8 +26,6 @@ async function detectSplitsFromTWSE(symbol: string, monthsBack = 24): Promise<Sp
     const splits: SplitEvent[] = []
     for (let i = 1; i < allDays.length; i++) {
       const prevClose = allDays[i - 1].close
-      // 除權參考價 = 收盤 - 漲跌。在分割當日，TWSE 以 prevClose/ratio 為參考基準，
-      // 當日市場漲跌反映在漲跌欄，還原後比例即為精確整數。
       const refPrice = allDays[i].close - allDays[i].priceChange
       if (refPrice <= 0 || isNaN(refPrice)) continue
       const ratio = prevClose / refPrice

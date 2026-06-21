@@ -2,11 +2,13 @@ import { useState } from 'react'
 import { TrendingUp, TrendingDown, DollarSign, Loader2, Save } from 'lucide-react'
 import {
   PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Legend,
+  AreaChart, Area, XAxis, YAxis, CartesianGrid,
 } from 'recharts'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { useNetWorth } from '@/hooks/useNetWorth'
 import { useCreateSnapshot } from '@/hooks/useSnapshots'
+import { usePortfolioTrend } from '@/hooks/usePortfolioTrend'
 import { useSettingsStore } from '@/store/settings'
 import { formatCurrency, extractErrorMessage } from '@/lib/utils'
 
@@ -32,6 +34,7 @@ export default function Dashboard() {
   const baseCurrency = useSettingsStore((s) => s.baseCurrency)
   const { data, isLoading } = useNetWorth()
   const createSnapshot = useCreateSnapshot()
+  const { data: trendPoints = [], isLoading: trendLoading } = usePortfolioTrend()
   const [snapshotError, setSnapshotError] = useState<string | null>(null)
 
   async function handleSaveSnapshot() {
@@ -212,6 +215,90 @@ export default function Dashboard() {
                   ))}
                 </div>
               </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* 每日投資趨勢 */}
+      {(trendLoading || trendPoints.length > 0) && (
+        <Card>
+          <CardHeader>
+            <CardTitle>投資組合歷史趨勢</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {trendLoading ? (
+              <div className="flex h-48 items-center justify-center">
+                <Loader2 className="h-5 w-5 animate-spin text-[hsl(240_5%_64.9%)]" />
+              </div>
+            ) : (
+              <ResponsiveContainer width="100%" height={260}>
+                <AreaChart data={trendPoints} margin={{ top: 4, right: 4, bottom: 0, left: 0 }}>
+                  <defs>
+                    <linearGradient id="gradInvest" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3} />
+                      <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
+                    </linearGradient>
+                    <linearGradient id="gradCash" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#22c55e" stopOpacity={0.3} />
+                      <stop offset="95%" stopColor="#22c55e" stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(240 3.7% 15.9%)" />
+                  <XAxis
+                    dataKey="date"
+                    tick={{ fontSize: 10, fill: 'hsl(240 5% 64.9%)' }}
+                    tickFormatter={(v: string) => v.slice(5)}
+                    interval="preserveStartEnd"
+                  />
+                  <YAxis
+                    tick={{ fontSize: 10, fill: 'hsl(240 5% 64.9%)' }}
+                    tickFormatter={(v: number) => {
+                      if (v >= 1_000_000) return `${(v / 1_000_000).toFixed(1)}M`
+                      if (v >= 1_000) return `${(v / 1_000).toFixed(0)}K`
+                      return String(v)
+                    }}
+                    width={52}
+                  />
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: 'hsl(240 10% 8%)',
+                      border: '1px solid hsl(240 3.7% 15.9%)',
+                      borderRadius: '8px',
+                      color: 'white',
+                      fontSize: 12,
+                    }}
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                    formatter={(value: any, name: any) =>
+                      [formatCurrency(Number(value), baseCurrency), name === 'investments' ? '投資部位' : '現金水位']
+                    }
+                    labelFormatter={(label: unknown) => String(label)}
+                  />
+                  <Legend
+                    formatter={(name: string) => (
+                      <span style={{ color: 'hsl(240 5% 80%)', fontSize: 12 }}>
+                        {name === 'investments' ? '投資部位' : '現金水位'}
+                      </span>
+                    )}
+                  />
+                  <Area
+                    type="monotone"
+                    dataKey="investments"
+                    stroke="#3b82f6"
+                    strokeWidth={2}
+                    fill="url(#gradInvest)"
+                    dot={false}
+                  />
+                  <Area
+                    type="monotone"
+                    dataKey="cash"
+                    stroke="#22c55e"
+                    strokeWidth={2}
+                    fill="url(#gradCash)"
+                    dot={false}
+                  />
+                </AreaChart>
+              </ResponsiveContainer>
             )}
           </CardContent>
         </Card>
