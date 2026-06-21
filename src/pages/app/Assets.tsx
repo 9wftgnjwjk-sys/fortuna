@@ -45,8 +45,10 @@ function TransactionDialog({ position, onClose }: { position: Position; onClose:
   const importTx = useImportStockTransactions()
   const applySplit = useApplyStockSplit()
   const deleteTx = useDeleteStockTransaction()
+  const syncCost = useUpdatePosition()
   const [txForm, setTxForm] = useState<TxForm>(defaultTxForm)
   const [txError, setTxError] = useState<string | null>(null)
+  const [costSynced, setCostSynced] = useState(false)
   const [importPreview, setImportPreview] = useState<Array<{ date: string; qty: number; price: number }> | null>(null)
   const [pendingRows, setPendingRows] = useState<Array<Omit<StockTransaction, 'id' | 'user_id' | 'created_at'>> | null>(null)
   const [splitDone, setSplitDone] = useState<number | null>(null)
@@ -141,9 +143,26 @@ function TransactionDialog({ position, onClose }: { position: Position; onClose:
           </div>
           <div className="rounded-lg bg-[hsl(240_3.7%_8%)] px-3 py-2">
             <p className="text-[hsl(240_5%_64.9%)]">加權均價</p>
-            <p className="font-semibold text-white">
-              {avgCost != null ? formatCurrency(avgCost, position.currency) : '—'}
-            </p>
+            <div className="flex items-center gap-2">
+              <p className="font-semibold text-white">
+                {avgCost != null ? formatCurrency(avgCost, position.currency) : '—'}
+              </p>
+              {avgCost != null && (
+                <button
+                  onClick={async () => {
+                    setCostSynced(false)
+                    await syncCost.mutateAsync({ id: position.id, cost_price: avgCost })
+                    setCostSynced(true)
+                  }}
+                  disabled={syncCost.isPending}
+                  title="同步至部位均價（修正報酬率）"
+                  className="text-xs text-[hsl(240_5%_50%)] hover:text-[hsl(142.1_76.2%_56%)] transition-colors"
+                >
+                  {syncCost.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : '↺'}
+                </button>
+              )}
+            </div>
+            {costSynced && <p className="text-xs text-green-400 mt-0.5">均價已同步</p>}
           </div>
           <div className="rounded-lg bg-[hsl(240_3.7%_8%)] px-3 py-2">
             <p className="text-[hsl(240_5%_64.9%)]">現價</p>
