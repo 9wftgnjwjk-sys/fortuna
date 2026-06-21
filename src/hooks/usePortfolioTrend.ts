@@ -69,27 +69,43 @@ export function usePortfolioTrend(monthsBack = 13) {
 
       // Calculate months needed to cover the earliest transaction date
       const earliestTx = txRows[0]?.transaction_date ?? null
-      const dynamicMonthsBack = earliestTx
-        ? Math.ceil((Date.now() - new Date(earliestTx).getTime()) / (1000 * 60 * 60 * 24 * 30)) + 1
-        : monthsBack
+      const dynamicMonthsBack = (() => {
+        if (!earliestTx) return monthsBack
+        const ms = Date.now() - new Date(earliestTx).getTime()
+        if (isNaN(ms)) return monthsBack
+        return Math.ceil(ms / (1000 * 60 * 60 * 24 * 30)) + 1
+      })()
 
       // ── Fetch daily price history + split events for each tw_stock ─────────
       const symbolDataList = await Promise.all(
         twPositions.map((p) => fetchTWSESymbolData(p.symbol, dynamicMonthsBack))
       )
 
-      // Group transactions by position for fast lookup
-      const txsByPosition = new Map<string, Array<{ date: string; quantity: number }>>()
+      // Group transactions by position and pre-sort for prefix-sum lookup
+      const txsByPosition = new Map<string, Array<{ date: string; cumQty: number }>>()
       for (const tx of txRows) {
         if (!txsByPosition.has(tx.position_id)) txsByPosition.set(tx.position_id, [])
-        txsByPosition.get(tx.position_id)!.push({ date: tx.transaction_date, quantity: tx.quantity })
+        txsByPosition.get(tx.position_id)!.push({ date: tx.transaction_date, cumQty: tx.quantity })
+      }
+      // Convert each list to a sorted prefix-sum array (txRows already ordered ascending)
+      for (const [posId, entries] of txsByPosition) {
+        let running = 0
+        for (const e of entries) { running += e.cumQty; e.cumQty = running }
+        txsByPosition.set(posId, entries)
       }
 
-      // Cumulative quantity on a date from transaction history (null = no transactions)
+      // Cumulative quantity on a date via binary search on prefix-sum array.
+      // Returns null when no transactions exist on or before `date` so caller can
+      // fall back to the current position quantity.
       function qtyFromTxs(posId: string, date: string): number | null {
-        const txs = txsByPosition.get(posId)
-        if (!txs || txs.length === 0) return null
-        return txs.filter((tx) => tx.date <= date).reduce((sum, tx) => sum + tx.quantity, 0)
+        const entries = txsByPosition.get(posId)
+        if (!entries || entries.length === 0) return null
+        let lo = 0, hi = entries.length - 1, result = -1
+        while (lo <= hi) {
+          const mid = (lo + hi) >> 1
+          if (entries[mid].date <= date) { result = mid; lo = mid + 1 } else { hi = mid - 1 }
+        }
+        return result === -1 ? null : entries[result].cumQty
       }
 
       const allDates = new Set<string>()

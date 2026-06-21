@@ -493,18 +493,20 @@ export default function Assets() {
                     </div>
                     <div className="flex justify-between">
                       <span className="text-[hsl(240_5%_64.9%)]">總損益</span>
-                      <span className={`font-semibold ${totalGain >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                        {totalGain >= 0 ? '+' : ''}{formatCurrency(totalGain, (singleCurrency ?? 'TWD') as Parameters<typeof formatCurrency>[1])}
+                      <span className={`font-semibold ${totalGain > 0 ? 'text-green-400' : totalGain < 0 ? 'text-red-400' : 'text-white'}`}>
+                        {totalGain > 0 ? '+' : ''}{formatCurrency(totalGain, (singleCurrency ?? 'TWD') as Parameters<typeof formatCurrency>[1])}
                         {!singleCurrency && <span className="ml-1 text-xs text-[hsl(240_5%_50%)]">*</span>}
                       </span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-[hsl(240_5%_64.9%)]">總報酬率</span>
-                      {totalReturnRate != null
-                        ? <span className={`font-semibold ${totalReturnRate >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                            {totalReturnRate >= 0 ? '+' : ''}{totalReturnRate.toFixed(2)}%
-                          </span>
-                        : <span className="text-white">—</span>
+                      {totalReturnRate != null && !singleCurrency
+                        ? <span className="text-[hsl(240_5%_50%)]">—</span>
+                        : totalReturnRate != null
+                          ? <span className={`font-semibold ${totalReturnRate > 0 ? 'text-green-400' : totalReturnRate < 0 ? 'text-red-400' : 'text-white'}`}>
+                              {totalReturnRate > 0 ? '+' : ''}{totalReturnRate.toFixed(2)}%
+                            </span>
+                          : <span className="text-white">—</span>
                       }
                     </div>
                     {!singleCurrency && (

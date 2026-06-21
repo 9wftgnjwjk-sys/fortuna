@@ -115,6 +115,25 @@ describe('parseCathayCSV — 0050 元大台灣50', () => {
   })
 })
 
+// ── 邊界條件 ──────────────────────────────────────────────────────────────────
+describe('parseCathayCSV — edge cases', () => {
+  it('returns [] for an empty CSV (header only)', () => {
+    const headerOnly = `根據您篩選的結果，總計有0筆資料，當前資料為1-0筆，看更多請至國泰證券app查詢
+股名,日期,成交股數,淨收付金額,買賣別,成交價,成本,手續費,交易稅,融資金額/券擔保品,資自備款/券保證金,利息,稅款,券手續費/標借費,委託書號`
+    expect(parseCathayCSV(headerOnly, 'pos-x')).toHaveLength(0)
+  })
+
+  it('filters out 現賣 rows and only keeps 現買', () => {
+    const mixed = `摘要行
+股名,日期,成交股數,淨收付金額,買賣別,成交價,成本,手續費,交易稅,融資金額/券擔保品,資自備款/券保證金,利息,稅款,券手續費/標借費,委託書號
+元大台灣50,2026/06/15,42,"-4,413",現買,105.07,"4,412",1,0,0,0,0,0,0,p01
+元大台灣50,2026/06/10,20,"2,100",現賣,105.0,"2,100",1,0,0,0,0,0,0,p02`
+    const result = parseCathayCSV(mixed, 'pos-sell')
+    expect(result).toHaveLength(1)
+    expect(result[0].transaction_date).toBe('2026-06-15')
+  })
+})
+
 // ── 006208 富邦台50 ───────────────────────────────────────────────────────────
 describe('parseCathayCSV — 006208 富邦台50', () => {
   const rows = parseCathayCSV(CSV_006208, 'pos-006208')
