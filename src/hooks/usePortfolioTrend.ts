@@ -4,9 +4,10 @@ import { useAccounts } from './useAccounts'
 import { useLiabilities } from './useLiabilities'
 import { usePrices } from './usePrices'
 import { useSettingsStore } from '@/store/settings'
-import { fetchTWSESymbolData, effectiveQuantity } from '@/lib/twse'
+import { fetchTWSESymbolData, effectiveQuantity, type SplitInfo } from '@/lib/twse'
 import { fetchExchangeRates, convertCurrency } from '@/lib/currency'
 import { computeLiabilityBalance } from '@/lib/utils'
+import { supabase } from '@/lib/supabase'
 import type { Currency } from '@/types'
 
 export interface TrendPoint {
@@ -55,9 +56,30 @@ export function usePortfolioTrend(monthsBack = 13) {
       }, 0)
 
       // ── Fetch daily price history + split events for each tw_stock ─────────
-      const symbolDataList = await Promise.all(
-        twPositions.map((p) => fetchTWSESymbolData(p.symbol, monthsBack))
-      )
+      const [symbolDataList, txResult] = await Promise.all([
+        Promise.all(twPositions.map((p) => fetchTWSESymbolData(p.symbol, monthsBack))),
+        twPositions.length > 0
+          ? supabase
+              .from('stock_transactions')
+              .select('position_id, transaction_date, quantity')
+              .in('position_id', twPositions.map((p) => p.id))
+              .order('transaction_date', { ascending: true })
+          : Promise.resolve({ data: [] }),
+      ])
+
+      // Group transactions by position for fast lookup
+      const txsByPosition = new Map<string, Array<{ date: string; quantity: number }>>()
+      for (const tx of txResult.data ?? []) {
+        if (!txsByPosition.has(tx.position_id)) txsByPosition.set(tx.position_id, [])
+        txsByPosition.get(tx.position_id)!.push({ date: tx.transaction_date, quantity: tx.quantity })
+      }
+
+      // Cumulative quantity on a date from transaction history (null = no transactions)
+      function qtyFromTxs(posId: string, date: string): number | null {
+        const txs = txsByPosition.get(posId)
+        if (!txs || txs.length === 0) return null
+        return txs.filter((tx) => tx.date <= date).reduce((sum, tx) => sum + tx.quantity, 0)
+      }
 
       const allDates = new Set<string>()
       symbolDataList.forEach(({ prices }) => prices.forEach((_, date) => allDates.add(date)))
@@ -74,11 +96,12 @@ export function usePortfolioTrend(monthsBack = 13) {
 
         for (let i = 0; i < twPositions.length; i++) {
           const p = twPositions[i]
-          const { prices, splits } = symbolDataList[i]
+          const { prices, splits }: { prices: Map<string, number>; splits: SplitInfo[] } = symbolDataList[i]
           const dayPrice = prices.get(date)
           if (dayPrice !== undefined) lastKnown.set(p.symbol, dayPrice)
           const price = lastKnown.get(p.symbol) ?? 0
-          const qty = effectiveQuantity(p.quantity, splits, date)
+          // Use transaction history when available; fall back to current qty + split adjustment
+          const qty = qtyFromTxs(p.id, date) ?? effectiveQuantity(p.quantity, splits, date)
           dayInvestments += convertCurrency(price * qty, p.currency as Currency, baseCurrency, rates)
         }
 
