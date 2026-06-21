@@ -39,9 +39,11 @@ export default function Liabilities() {
 
   const [dialog, setDialog] = useState<{ open: boolean; editing: Liability | null }>({ open: false, editing: null })
   const [form, setForm] = useState<LiabilityForm>(defaultForm)
+  const [saveError, setSaveError] = useState<string | null>(null)
 
   function openNew() {
     setForm(defaultForm)
+    setSaveError(null)
     setDialog({ open: true, editing: null })
   }
 
@@ -52,26 +54,35 @@ export default function Liabilities() {
       currency: l.currency,
       balance: String(l.balance),
       monthly_payment: l.monthly_payment != null ? String(l.monthly_payment) : '',
-      payment_start_date: l.payment_start_date ?? '',
+      // type="month" expects "YYYY-MM", strip the day part if present
+      payment_start_date: l.payment_start_date ? l.payment_start_date.substring(0, 7) : '',
     })
+    setSaveError(null)
     setDialog({ open: true, editing: l })
   }
 
   async function handleSave() {
+    setSaveError(null)
     const payload = {
       name: form.name,
       type: form.type,
       currency: form.currency,
       balance: parseFloat(form.balance) || 0,
       monthly_payment: form.monthly_payment ? parseFloat(form.monthly_payment) : null,
-      payment_start_date: form.payment_start_date || null,
+      // append "-01" so PostgreSQL DATE type gets a valid "YYYY-MM-DD"
+      payment_start_date: form.payment_start_date ? form.payment_start_date + '-01' : null,
     }
-    if (dialog.editing) {
-      await updateLiability.mutateAsync({ id: dialog.editing.id, ...payload })
-    } else {
-      await createLiability.mutateAsync(payload)
+    try {
+      if (dialog.editing) {
+        await updateLiability.mutateAsync({ id: dialog.editing.id, ...payload })
+      } else {
+        await createLiability.mutateAsync(payload)
+      }
+      setDialog({ open: false, editing: null })
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : (err as { message?: string })?.message ?? JSON.stringify(err)
+      setSaveError(msg || '儲存失敗，請再試一次')
     }
-    setDialog({ open: false, editing: null })
   }
 
   const totalTWD = liabilities.reduce((sum, l) => {
@@ -178,6 +189,7 @@ export default function Liabilities() {
               </div>
             </div>
           </div>
+          {saveError && <p className="text-sm text-red-400">{saveError}</p>}
           <DialogFooter>
             <Button variant="outline" onClick={() => setDialog({ open: false, editing: null })}>取消</Button>
             <Button onClick={handleSave} disabled={createLiability.isPending || updateLiability.isPending}>儲存</Button>
