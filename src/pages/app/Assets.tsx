@@ -119,6 +119,8 @@ function TransactionDialog({ position, onClose }: { position: Position; onClose:
     setTxError(null)
     try {
       await importTx.mutateAsync(pendingRows)
+      const newTotal = totalShares + pendingRows.reduce((s, r) => s + r.quantity, 0)
+      await syncCost.mutateAsync({ id: position.id, quantity: newTotal })
       setImportPreview(null)
       setPendingRows(null)
     } catch (err) {
